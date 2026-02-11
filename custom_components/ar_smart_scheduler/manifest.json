@@ -1,1 +1,11 @@
-
+{
+  "domain": "ar_smart_scheduler",
+  "name": "AR Smart Scheduler",
+  "version": "0.0.1",
+  "documentation": "https://example.invalid",
+  "issue_tracker": "https://example.invalid",
+  "config_flow": true,
+  "requirements": [],
+  "codeowners": [],
+  "iot_class": "local_push"
+}
