@@ -2,10 +2,10 @@
   "domain": "ar_smart_scheduler",
   "name": "AR Smart Scheduler",
   "version": "0.0.1",
-  "documentation": "https://example.invalid",
-  "issue_tracker": "https://example.invalid",
+  "documentation": "https://github.com/marsh4200/ar_smart_scheduler",
+  "issue_tracker": "https://github.com/marsh4200/ar_smart_scheduler/issues",
   "config_flow": true,
   "requirements": [],
-  "codeowners": [],
+  "codeowners": ["@marsh4200"],
   "iot_class": "local_push"
 }
