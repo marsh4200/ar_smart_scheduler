@@ -1,0 +1,7 @@
+{
+  "name": "AR Smart Scheduler",
+  "content_in_root": false,
+  "domains": ["ar_smart_scheduler"],
+  "homeassistant": "2024.6.0",
+  "render_readme": true
+}
