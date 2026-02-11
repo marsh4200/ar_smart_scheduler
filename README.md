@@ -1,1 +1,112 @@
-# ar_smart_scheduler
+# AR Smart Scheduler
+
+[![HACS](https://img.shields.io/badge/HACS-Custom-blue.svg)](https://hacs.xyz)
+
+A Home Assistant custom integration that lets you schedule any entity with:
+- Start & End times  
+- Selectable weekdays  
+- Enable / Disable toggle  
+
+Perfect for lights, pumps, gates, garage doors, and more — built with installers in mind so customers can adjust schedules from the dashboard without admin access.
+
+---
+
+## ✨ Features
+
+- ⏰ Start & End time control (time entities)
+- 📅 Selectable weekdays (Mon–Sun switches)
+- 🔘 Enable / Disable schedule
+- 🧩 Works with any domain (light, switch, cover, etc.)
+- 🛠️ Built for installers & client handover
+- 🧠 Real-time updates (no refresh needed)
+- 🖥️ Lovelace-friendly controls
+
+---
+
+## 📦 Installation (HACS – Custom Repository)
+
+> This integration is installed via HACS as a custom repository.
+
+1. Open **HACS**
+2. Go to **Integrations**
+3. Click the **three dots (⋮)** → **Custom repositories**
+4. Add:
+https://github.com/marsh4200/ar_smart_scheduler
+
+Category: **Integration**
+5. Search for **AR Smart Scheduler** and install it
+6. Restart Home Assistant
+
+---
+
+## 🧰 Manual Installation
+
+1. Copy the folder:
+custom_components/ar_smart_scheduler
+
+into:
+/config/custom_components/ar_smart_scheduler
+
+2. Restart Home Assistant
+3. Go to **Settings → Devices & Services → Add Integration**
+4. Search for **AR Smart Scheduler**
+
+---
+
+## ⚙️ Configuration
+
+Once installed:
+
+1. Add the integration from **Settings → Devices & Services**
+2. Select the **entity to control** (light, switch, cover, etc.)
+3. Give your schedule a name (e.g. *Gaming Lights*)
+4. Set default start/end times and weekdays
+
+---
+
+## 🖥️ Lovelace Example
+
+```yaml
+type: entities
+title: 🎮 Gaming Room Lights
+entities:
+- entity: switch.gaming_lights_schedule_enabled
+ name: Enable Schedule
+- entity: time.gaming_lights_start_time
+ name: Start Time
+- entity: time.gaming_lights_end_time
+ name: End Time
+- type: section
+ label: Days
+- entity: switch.gaming_lights_mon
+- entity: switch.gaming_lights_tue
+- entity: switch.gaming_lights_wed
+- entity: switch.gaming_lights_thu
+- entity: switch.gaming_lights_fri
+- entity: switch.gaming_lights_sat
+- entity: switch.gaming_lights_sun
+state_color: true
+🧠 Notes
+Schedules respect selected weekdays
+
+Changes take effect immediately
+
+No Home Assistant admin access required for end users
+
+🐞 Issues & Support
+Please report bugs or feature requests here:
+👉 https://github.com/marsh4200/ar_smart_scheduler/issues
+
+🙌 Credits
+Developed by AR Smart Home
+Built for real-world installer deployments and client-friendly dashboards.
+
+
+---
+
+## ✅ Optional: HACS “official” badge (if you ever submit to HACS store)
+
+Later, if you get listed in the HACS default store, you can swap the badge to:
+
+```markdown
+[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://hacs.xyz)
