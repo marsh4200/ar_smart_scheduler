@@ -1,1 +1,17 @@
-
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create Scheduler",
+        "description": "Select an entity and set start/end times. Users can adjust times from the dashboard without admin access.",
+        "data": {
+          "name": "Name",
+          "target_entity": "Entity to control",
+          "start_time": "Start time (HH:MM:SS)",
+          "end_time": "End time (HH:MM:SS)",
+          "weekdays": "Weekdays"
+        }
+      }
+    }
+  }
+}
