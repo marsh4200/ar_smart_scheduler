@@ -93,20 +93,7 @@ Changes take effect immediately
 
 No Home Assistant admin access required for end users
 
-🐞 Issues & Support
-Please report bugs or feature requests here:
-👉 https://github.com/marsh4200/ar_smart_scheduler/issues
-
 🙌 Credits
 Developed by AR Smart Home
 Built for real-world installer deployments and client-friendly dashboards.
 
-
----
-
-## ✅ Optional: HACS “official” badge (if you ever submit to HACS store)
-
-Later, if you get listed in the HACS default store, you can swap the badge to:
-
-```markdown
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://hacs.xyz)
