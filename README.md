@@ -1,5 +1,11 @@
 # AR Smart Scheduler
 
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](
+  https://my.home-assistant.io/redirect/hacs_repository/?owner=marsh4200&repository=ar_smart_scheduler&category=integration
+)
+
+
+
 [![HACS](https://img.shields.io/badge/HACS-Custom-blue.svg)](https://hacs.xyz)
 
 A Home Assistant custom integration that lets you schedule any entity with:
