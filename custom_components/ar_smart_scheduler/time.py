@@ -6,7 +6,10 @@ from homeassistant.components.time import TimeEntity
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN, CONF_START, CONF_END, SIGNAL_UPDATED
+from .const import (
+    DOMAIN, CONF_START, CONF_END,
+    SIGNAL_START_UPDATED, SIGNAL_END_UPDATED
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -26,11 +29,6 @@ class _BaseTime(TimeEntity):
         self.scheduler = scheduler
         self._unsub = None
 
-    async def async_added_to_hass(self):
-        self._unsub = async_dispatcher_connect(
-            self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}", self.async_write_ha_state
-        )
-
     async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
@@ -44,6 +42,13 @@ class SchedulerStartTime(_BaseTime):
         super().__init__(entry, scheduler)
         self._attr_name = f"{entry.title} Start Time"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_start"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state
+        )
 
     @property
     def native_value(self):
@@ -60,6 +65,13 @@ class SchedulerEndTime(_BaseTime):
         super().__init__(entry, scheduler)
         self._attr_name = f"{entry.title} End Time"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_end"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state
+        )
 
     @property
     def native_value(self):

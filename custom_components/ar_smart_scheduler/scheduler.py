@@ -39,7 +39,7 @@ class ARScheduler:
         self.entry = entry
         self._unsub_start: Optional[callable] = None
         self._unsub_end: Optional[callable] = None
-        self.state = State(True, dt.time(6,0,0), dt.time(18,0,0), set(range(7)))
+        self.state = State(True, dt.time(6, 0, 0), dt.time(18, 0, 0), set(range(7)))
         self._load()
 
     def _load(self) -> None:
@@ -57,6 +57,7 @@ class ARScheduler:
         self._remove_tracks()
 
     async def async_reload_from_entry(self) -> None:
+        # Used when options flow or config entry reloads
         self._load()
         self._setup_tracks()
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}")
@@ -65,7 +66,13 @@ class ARScheduler:
         opts = dict(self.entry.options or {})
         opts[key] = value
         self.hass.config_entries.async_update_entry(self.entry, options=opts)
-        await self.async_reload_from_entry()
+
+        # 🔧 FIX: do not nuke and reload everything (this caused the time copying bug)
+        self._load()
+        self._setup_tracks()
+
+        # Update entities cleanly
+        async_dispatcher_send(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}")
 
     def _remove_tracks(self) -> None:
         if self._unsub_start:
@@ -78,8 +85,12 @@ class ARScheduler:
     def _setup_tracks(self) -> None:
         self._remove_tracks()
         st, et = self.state.start, self.state.end
-        self._unsub_start = async_track_time_change(self.hass, self._handle_start, hour=st.hour, minute=st.minute, second=st.second)
-        self._unsub_end = async_track_time_change(self.hass, self._handle_end, hour=et.hour, minute=et.minute, second=et.second)
+        self._unsub_start = async_track_time_change(
+            self.hass, self._handle_start, hour=st.hour, minute=st.minute, second=st.second
+        )
+        self._unsub_end = async_track_time_change(
+            self.hass, self._handle_end, hour=et.hour, minute=et.minute, second=et.second
+        )
 
     def _today_allowed(self) -> bool:
         now = dt_util.now()
@@ -88,7 +99,7 @@ class ARScheduler:
     async def _call_target(self, service: str) -> None:
         targets = self.entry.data.get(CONF_TARGET_ENTITY)
 
-        # ✅ Backwards compatibility
+        # Backwards compatibility
         if isinstance(targets, str):
             targets = [targets]
 
