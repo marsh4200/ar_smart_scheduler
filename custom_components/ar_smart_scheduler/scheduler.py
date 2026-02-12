@@ -18,7 +18,9 @@ from .const import (
 def _parse_time(value: str, fallback: str) -> dt.time:
     try:
         parts = str(value or fallback).split(":")
-        hh = int(parts[0]); mm = int(parts[1]) if len(parts) > 1 else 0; ss = int(parts[2]) if len(parts) > 2 else 0
+        hh = int(parts[0])
+        mm = int(parts[1]) if len(parts) > 1 else 0
+        ss = int(parts[2]) if len(parts) > 2 else 0
         return dt.time(hour=hh, minute=mm, second=ss)
     except Exception:
         parts = fallback.split(":")
@@ -67,9 +69,11 @@ class ARScheduler:
 
     def _remove_tracks(self) -> None:
         if self._unsub_start:
-            self._unsub_start(); self._unsub_start = None
+            self._unsub_start()
+            self._unsub_start = None
         if self._unsub_end:
-            self._unsub_end(); self._unsub_end = None
+            self._unsub_end()
+            self._unsub_end = None
 
     def _setup_tracks(self) -> None:
         self._remove_tracks()
@@ -82,9 +86,27 @@ class ARScheduler:
         return now.weekday() in (self.state.weekdays or set(range(7)))
 
     async def _call_target(self, service: str) -> None:
-        target = self.entry.data[CONF_TARGET_ENTITY]
-        domain = target.split(".", 1)[0]
-        await self.hass.services.async_call(domain, service, {"entity_id": target}, blocking=False)
+        targets = self.entry.data.get(CONF_TARGET_ENTITY)
+
+        # ✅ Backwards compatibility
+        if isinstance(targets, str):
+            targets = [targets]
+
+        if not targets:
+            return
+
+        by_domain = {}
+        for ent in targets:
+            domain = ent.split(".", 1)[0]
+            by_domain.setdefault(domain, []).append(ent)
+
+        for domain, entity_ids in by_domain.items():
+            await self.hass.services.async_call(
+                domain,
+                service,
+                {"entity_id": entity_ids},
+                blocking=False,
+            )
 
     @callback
     async def _handle_start(self, now: dt.datetime) -> None:
