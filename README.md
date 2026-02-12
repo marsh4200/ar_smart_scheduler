@@ -101,6 +101,6 @@ No Home Assistant admin access required for end users
 
 ---
 
+
 ## 🙌 Credits  
-**Developed by [AR Smart Home](https://www.arsmarthome.co.za)**  
-Smart automation solutions for modern homes.
+**Developed by AR Smart Home**
