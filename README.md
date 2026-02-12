@@ -99,7 +99,8 @@ Changes take effect immediately
 
 No Home Assistant admin access required for end users
 
-🙌 Credits
-Developed by AR Smart Home
-Built for real-world installer deployments and client-friendly dashboards.
+---
 
+## 🙌 Credits  
+**Developed by [AR Smart Home](https://www.arsmarthome.co.za)**  
+Smart automation solutions for modern homes.
