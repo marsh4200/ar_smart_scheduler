@@ -21,11 +21,16 @@ class ARSchedulerInfo(SensorEntity):
         self._unsub = None
 
     async def async_added_to_hass(self):
-        self._unsub = async_dispatcher_connect(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}", self._handle_update)
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_UPDATED}_{self.entry.entry_id}",
+            self._handle_update
+        )
 
     async def async_will_remove_from_hass(self):
         if self._unsub:
-            self._unsub(); self._unsub=None
+            self._unsub()
+            self._unsub = None
 
     def _handle_update(self):
         self.async_write_ha_state()
@@ -37,7 +42,8 @@ class ARSchedulerInfo(SensorEntity):
     @property
     def extra_state_attributes(self):
         return {
-            "target_entity": self.entry.data.get(CONF_TARGET_ENTITY),
+            # ✅ shows list now
+            "target_entities": self.entry.data.get(CONF_TARGET_ENTITY),
             "start_time": f"{self.scheduler.state.start.hour:02d}:{self.scheduler.state.start.minute:02d}:{self.scheduler.state.start.second:02d}",
             "end_time": f"{self.scheduler.state.end.hour:02d}:{self.scheduler.state.end.minute:02d}:{self.scheduler.state.end.second:02d}",
             "weekdays": sorted(list(self.entry.options.get("weekdays", []))),
