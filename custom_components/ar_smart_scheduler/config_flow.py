@@ -30,7 +30,12 @@ class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema({
             vol.Required(CONF_NAME, default="Scheduler"): str,
-            vol.Required(CONF_TARGET_ENTITY): selector.EntitySelector(selector.EntitySelectorConfig()),
+
+            # ✅ ONLY CHANGE: allow selecting MULTIPLE entities
+            vol.Required(CONF_TARGET_ENTITY): selector.EntitySelector(
+                selector.EntitySelectorConfig(multiple=True)
+            ),
+
             vol.Optional(CONF_START, default=DEFAULT_START): selector.TextSelector(),
             vol.Optional(CONF_END, default=DEFAULT_END): selector.TextSelector(),
             vol.Optional(CONF_WEEKDAYS, default=DEFAULT_WEEKDAYS): selector.SelectSelector(
