@@ -11,9 +11,20 @@ from homeassistant.util import dt as dt_util
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
-    CONF_TARGET_ENTITY, CONF_WEEKDAYS, CONF_START, CONF_END, CONF_ENABLED,
-    DEFAULT_WEEKDAYS, DEFAULT_START, DEFAULT_END, WEEKDAY_MAP, SIGNAL_UPDATED
+    CONF_TARGET_ENTITY,
+    CONF_WEEKDAYS,
+    CONF_START,
+    CONF_END,
+    CONF_ENABLED,
+    DEFAULT_WEEKDAYS,
+    DEFAULT_START,
+    DEFAULT_END,
+    WEEKDAY_MAP,
+    SIGNAL_UPDATED,
+    SIGNAL_START_UPDATED,
+    SIGNAL_END_UPDATED,
 )
+
 
 def _parse_time(value: str, fallback: str) -> dt.time:
     try:
@@ -26,12 +37,14 @@ def _parse_time(value: str, fallback: str) -> dt.time:
         parts = fallback.split(":")
         return dt.time(int(parts[0]), int(parts[1]), int(parts[2]))
 
+
 @dataclass
 class State:
     enabled: bool
     start: dt.time
     end: dt.time
     weekdays: Set[int]
+
 
 class ARScheduler:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -57,22 +70,26 @@ class ARScheduler:
         self._remove_tracks()
 
     async def async_reload_from_entry(self) -> None:
-        # Used when options flow or config entry reloads
         self._load()
         self._setup_tracks()
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}")
+        async_dispatcher_send(self.hass, f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}")
+        async_dispatcher_send(self.hass, f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}")
 
     async def async_set_option(self, key: str, value):
         opts = dict(self.entry.options or {})
         opts[key] = value
         self.hass.config_entries.async_update_entry(self.entry, options=opts)
 
-        # 🔧 FIX: do not nuke and reload everything (this caused the time copying bug)
         self._load()
         self._setup_tracks()
 
-        # Update entities cleanly
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}")
+
+        if key == CONF_START:
+            async_dispatcher_send(self.hass, f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}")
+        elif key == CONF_END:
+            async_dispatcher_send(self.hass, f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}")
 
     def _remove_tracks(self) -> None:
         if self._unsub_start:
