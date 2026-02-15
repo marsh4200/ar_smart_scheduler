@@ -1,4 +1,7 @@
 # AR Smart Scheduler
+## 🙌 Credits  
+**Developed by AR Smart Home**
+
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](
   https://my.home-assistant.io/redirect/hacs_repository/?owner=marsh4200&repository=ar_smart_scheduler&category=integration
@@ -102,5 +105,3 @@ No Home Assistant admin access required for end users
 ---
 
 
-## 🙌 Credits  
-**Developed by AR Smart Home**
