@@ -1,6 +1,6 @@
 # AR Smart Scheduler
 ## 🙌 Credits  
-**Developed by AR Smart Home**
+**Developed by A R Smart Home**
 
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](
