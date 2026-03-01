@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from typing import Optional, Set
+from typing import Optional, Set, Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
@@ -16,9 +16,17 @@ from .const import (
     CONF_START,
     CONF_END,
     CONF_ENABLED,
+    CONF_START_SERVICE,
+    CONF_END_SERVICE,
+    CONF_START_DATA,
+    CONF_END_DATA,
     DEFAULT_WEEKDAYS,
     DEFAULT_START,
     DEFAULT_END,
+    DEFAULT_START_SERVICE,
+    DEFAULT_END_SERVICE,
+    DEFAULT_START_DATA,
+    DEFAULT_END_DATA,
     WEEKDAY_MAP,
     SIGNAL_UPDATED,
     SIGNAL_START_UPDATED,
@@ -44,6 +52,10 @@ class State:
     start: dt.time
     end: dt.time
     weekdays: Set[int]
+    start_service: str
+    end_service: str
+    start_data: dict[str, Any]
+    end_data: dict[str, Any]
 
 
 class ARScheduler:
@@ -52,7 +64,16 @@ class ARScheduler:
         self.entry = entry
         self._unsub_start: Optional[callable] = None
         self._unsub_end: Optional[callable] = None
-        self.state = State(True, dt.time(6, 0, 0), dt.time(18, 0, 0), set(range(7)))
+        self.state = State(
+            enabled=True,
+            start=dt.time(6, 0, 0),
+            end=dt.time(18, 0, 0),
+            weekdays=set(range(7)),
+            start_service=DEFAULT_START_SERVICE,
+            end_service=DEFAULT_END_SERVICE,
+            start_data=dict(DEFAULT_START_DATA),
+            end_data=dict(DEFAULT_END_DATA),
+        )
         self._load()
 
     def _load(self) -> None:
@@ -60,8 +81,18 @@ class ARScheduler:
         self.state.enabled = bool(opts.get(CONF_ENABLED, True))
         self.state.start = _parse_time(opts.get(CONF_START), DEFAULT_START)
         self.state.end = _parse_time(opts.get(CONF_END), DEFAULT_END)
+
         wk = opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)
         self.state.weekdays = {WEEKDAY_MAP[w] for w in wk if w in WEEKDAY_MAP}
+        # NOTE: do NOT fall back to all days when empty
+
+        self.state.start_service = str(opts.get(CONF_START_SERVICE, DEFAULT_START_SERVICE) or DEFAULT_START_SERVICE)
+        self.state.end_service = str(opts.get(CONF_END_SERVICE, DEFAULT_END_SERVICE) or DEFAULT_END_SERVICE)
+
+        sd = opts.get(CONF_START_DATA, DEFAULT_START_DATA)
+        ed = opts.get(CONF_END_DATA, DEFAULT_END_DATA)
+        self.state.start_data = dict(sd) if isinstance(sd, dict) else {}
+        self.state.end_data = dict(ed) if isinstance(ed, dict) else {}
 
     async def async_start(self) -> None:
         self._setup_tracks()
@@ -110,10 +141,14 @@ class ARScheduler:
         )
 
     def _today_allowed(self) -> bool:
-        now = dt_util.now()
-        return now.weekday() in (self.state.weekdays or set(range(7)))
+        # ✅ FIX: if no weekdays selected, scheduler must not run
+        if not self.state.weekdays:
+            return False
 
-    async def _call_target(self, service: str) -> None:
+        now = dt_util.now()
+        return now.weekday() in self.state.weekdays
+
+    async def _call_targets(self, service: str, data: dict[str, Any]) -> None:
         targets = self.entry.data.get(CONF_TARGET_ENTITY)
 
         # Backwards compatibility
@@ -123,27 +158,24 @@ class ARScheduler:
         if not targets:
             return
 
-        by_domain = {}
+        by_domain: dict[str, list[str]] = {}
         for ent in targets:
             domain = ent.split(".", 1)[0]
             by_domain.setdefault(domain, []).append(ent)
 
         for domain, entity_ids in by_domain.items():
-            await self.hass.services.async_call(
-                domain,
-                service,
-                {"entity_id": entity_ids},
-                blocking=False,
-            )
+            payload = dict(data or {})
+            payload["entity_id"] = entity_ids
+            await self.hass.services.async_call(domain, service, payload, blocking=False)
 
     @callback
     async def _handle_start(self, now: dt.datetime) -> None:
         if not self.state.enabled or not self._today_allowed():
             return
-        await self._call_target("turn_on")
+        await self._call_targets(self.state.start_service, self.state.start_data)
 
     @callback
     async def _handle_end(self, now: dt.datetime) -> None:
         if not self.state.enabled or not self._today_allowed():
             return
-        await self._call_target("turn_off")
+        await self._call_targets(self.state.end_service, self.state.end_data)

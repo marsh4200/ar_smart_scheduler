@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime as dt
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -42,11 +41,14 @@ class ARSchedulerInfo(SensorEntity):
     @property
     def extra_state_attributes(self):
         return {
-            # ✅ shows list now
             "target_entities": self.entry.data.get(CONF_TARGET_ENTITY),
-            "start_time": f"{self.scheduler.state.start.hour:02d}:{self.scheduler.state.start.minute:02d}:{self.scheduler.state.start.second:02d}",
-            "end_time": f"{self.scheduler.state.end.hour:02d}:{self.scheduler.state.end.minute:02d}:{self.scheduler.state.end.second:02d}",
+            "start_time": self.scheduler.state.start.strftime("%H:%M:%S"),
+            "end_time": self.scheduler.state.end.strftime("%H:%M:%S"),
             "weekdays": sorted(list(self.entry.options.get("weekdays", []))),
+            "start_service": self.scheduler.state.start_service,
+            "end_service": self.scheduler.state.end_service,
+            "start_data": self.scheduler.state.start_data,
+            "end_data": self.scheduler.state.end_data,
         }
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
