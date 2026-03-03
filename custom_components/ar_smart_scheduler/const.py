@@ -14,6 +14,11 @@ CONF_START = "start_time"
 CONF_END = "end_time"
 CONF_ENABLED = "enabled"
 
+# NEW: Optional 2nd daily window
+CONF_SECOND_ENABLED = "second_enabled"
+CONF_SECOND_START = "second_start_time"
+CONF_SECOND_END = "second_end_time"
+
 # Internal: resolved HA services + data (customers never see these)
 CONF_START_SERVICE = "start_service"
 CONF_END_SERVICE = "end_service"
@@ -24,6 +29,11 @@ CONF_END_DATA = "end_data"
 DEFAULT_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 DEFAULT_START = "06:00:00"
 DEFAULT_END = "18:00:00"
+
+# NEW defaults for 2nd window
+DEFAULT_SECOND_ENABLED = False
+DEFAULT_SECOND_START = "16:00:00"
+DEFAULT_SECOND_END = "20:00:00"
 
 DEFAULT_START_SERVICE = "turn_on"
 DEFAULT_END_SERVICE = "turn_off"
@@ -93,3 +103,7 @@ DEFAULT_LIGHT_END_BRIGHTNESS = 10
 SIGNAL_UPDATED = "ar_smart_scheduler_updated"
 SIGNAL_START_UPDATED = "ar_smart_scheduler_start_updated"
 SIGNAL_END_UPDATED = "ar_smart_scheduler_end_updated"
+
+# NEW: Signals for 2nd window entities (if you later add TimeEntities for them)
+SIGNAL_START2_UPDATED = "ar_smart_scheduler_start2_updated"
+SIGNAL_END2_UPDATED = "ar_smart_scheduler_end2_updated"

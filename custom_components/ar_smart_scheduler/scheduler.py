@@ -16,6 +16,9 @@ from .const import (
     CONF_START,
     CONF_END,
     CONF_ENABLED,
+    CONF_SECOND_ENABLED,
+    CONF_SECOND_START,
+    CONF_SECOND_END,
     CONF_START_SERVICE,
     CONF_END_SERVICE,
     CONF_START_DATA,
@@ -23,6 +26,9 @@ from .const import (
     DEFAULT_WEEKDAYS,
     DEFAULT_START,
     DEFAULT_END,
+    DEFAULT_SECOND_ENABLED,
+    DEFAULT_SECOND_START,
+    DEFAULT_SECOND_END,
     DEFAULT_START_SERVICE,
     DEFAULT_END_SERVICE,
     DEFAULT_START_DATA,
@@ -31,6 +37,8 @@ from .const import (
     SIGNAL_UPDATED,
     SIGNAL_START_UPDATED,
     SIGNAL_END_UPDATED,
+    SIGNAL_START2_UPDATED,
+    SIGNAL_END2_UPDATED,
 )
 
 
@@ -51,6 +59,12 @@ class State:
     enabled: bool
     start: dt.time
     end: dt.time
+
+    # NEW: 2nd daily window
+    second_enabled: bool
+    second_start: dt.time
+    second_end: dt.time
+
     weekdays: Set[int]
     start_service: str
     end_service: str
@@ -62,12 +76,23 @@ class ARScheduler:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
         self.entry = entry
+
         self._unsub_start: Optional[callable] = None
         self._unsub_end: Optional[callable] = None
+
+        # NEW: second window unsubscribers
+        self._unsub_start2: Optional[callable] = None
+        self._unsub_end2: Optional[callable] = None
+
         self.state = State(
             enabled=True,
             start=dt.time(6, 0, 0),
             end=dt.time(18, 0, 0),
+
+            second_enabled=DEFAULT_SECOND_ENABLED,
+            second_start=_parse_time(DEFAULT_SECOND_START, DEFAULT_SECOND_START),
+            second_end=_parse_time(DEFAULT_SECOND_END, DEFAULT_SECOND_END),
+
             weekdays=set(range(7)),
             start_service=DEFAULT_START_SERVICE,
             end_service=DEFAULT_END_SERVICE,
@@ -78,9 +103,15 @@ class ARScheduler:
 
     def _load(self) -> None:
         opts = self.entry.options or {}
+
         self.state.enabled = bool(opts.get(CONF_ENABLED, True))
         self.state.start = _parse_time(opts.get(CONF_START), DEFAULT_START)
         self.state.end = _parse_time(opts.get(CONF_END), DEFAULT_END)
+
+        # NEW: load second window
+        self.state.second_enabled = bool(opts.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED))
+        self.state.second_start = _parse_time(opts.get(CONF_SECOND_START), DEFAULT_SECOND_START)
+        self.state.second_end = _parse_time(opts.get(CONF_SECOND_END), DEFAULT_SECOND_END)
 
         wk = opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)
         self.state.weekdays = {WEEKDAY_MAP[w] for w in wk if w in WEEKDAY_MAP}
@@ -106,6 +137,9 @@ class ARScheduler:
         async_dispatcher_send(self.hass, f"{SIGNAL_UPDATED}_{self.entry.entry_id}")
         async_dispatcher_send(self.hass, f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}")
         async_dispatcher_send(self.hass, f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}")
+        # NEW signals
+        async_dispatcher_send(self.hass, f"{SIGNAL_START2_UPDATED}_{self.entry.entry_id}")
+        async_dispatcher_send(self.hass, f"{SIGNAL_END2_UPDATED}_{self.entry.entry_id}")
 
     async def async_set_option(self, key: str, value):
         opts = dict(self.entry.options or {})
@@ -121,6 +155,10 @@ class ARScheduler:
             async_dispatcher_send(self.hass, f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}")
         elif key == CONF_END:
             async_dispatcher_send(self.hass, f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}")
+        elif key in (CONF_SECOND_ENABLED, CONF_SECOND_START):
+            async_dispatcher_send(self.hass, f"{SIGNAL_START2_UPDATED}_{self.entry.entry_id}")
+        elif key == CONF_SECOND_END:
+            async_dispatcher_send(self.hass, f"{SIGNAL_END2_UPDATED}_{self.entry.entry_id}")
 
     def _remove_tracks(self) -> None:
         if self._unsub_start:
@@ -130,8 +168,17 @@ class ARScheduler:
             self._unsub_end()
             self._unsub_end = None
 
+        # NEW: remove second window tracks
+        if self._unsub_start2:
+            self._unsub_start2()
+            self._unsub_start2 = None
+        if self._unsub_end2:
+            self._unsub_end2()
+            self._unsub_end2 = None
+
     def _setup_tracks(self) -> None:
         self._remove_tracks()
+
         st, et = self.state.start, self.state.end
         self._unsub_start = async_track_time_change(
             self.hass, self._handle_start, hour=st.hour, minute=st.minute, second=st.second
@@ -139,6 +186,16 @@ class ARScheduler:
         self._unsub_end = async_track_time_change(
             self.hass, self._handle_end, hour=et.hour, minute=et.minute, second=et.second
         )
+
+        # NEW: second window tracks (only if enabled)
+        if self.state.second_enabled:
+            st2, et2 = self.state.second_start, self.state.second_end
+            self._unsub_start2 = async_track_time_change(
+                self.hass, self._handle_start2, hour=st2.hour, minute=st2.minute, second=st2.second
+            )
+            self._unsub_end2 = async_track_time_change(
+                self.hass, self._handle_end2, hour=et2.hour, minute=et2.minute, second=et2.second
+            )
 
     def _today_allowed(self) -> bool:
         # ✅ FIX: if no weekdays selected, scheduler must not run
@@ -177,5 +234,18 @@ class ARScheduler:
     @callback
     async def _handle_end(self, now: dt.datetime) -> None:
         if not self.state.enabled or not self._today_allowed():
+            return
+        await self._call_targets(self.state.end_service, self.state.end_data)
+
+    # NEW: second window handlers
+    @callback
+    async def _handle_start2(self, now: dt.datetime) -> None:
+        if not self.state.enabled or not self._today_allowed() or not self.state.second_enabled:
+            return
+        await self._call_targets(self.state.start_service, self.state.start_data)
+
+    @callback
+    async def _handle_end2(self, now: dt.datetime) -> None:
+        if not self.state.enabled or not self._today_allowed() or not self.state.second_enabled:
             return
         await self._call_targets(self.state.end_service, self.state.end_data)

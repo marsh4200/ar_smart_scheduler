@@ -7,22 +7,34 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
-    DOMAIN, CONF_START, CONF_END,
-    SIGNAL_START_UPDATED, SIGNAL_END_UPDATED
+    DOMAIN,
+    CONF_START,
+    CONF_END,
+    CONF_SECOND_START,
+    CONF_SECOND_END,
+    SIGNAL_START_UPDATED,
+    SIGNAL_END_UPDATED,
+    SIGNAL_START2_UPDATED,
+    SIGNAL_END2_UPDATED,
+    SIGNAL_UPDATED,
 )
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     scheduler = hass.data[DOMAIN][entry.entry_id]
+
     async_add_entities([
         SchedulerStartTime(entry, scheduler),
         SchedulerEndTime(entry, scheduler),
+        SchedulerSecondStartTime(entry, scheduler),
+        SchedulerSecondEndTime(entry, scheduler),
     ])
 
 
 class _BaseTime(TimeEntity):
     should_poll = False
     _attr_has_entity_name = False
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry, scheduler):
         self.entry = entry
@@ -35,8 +47,11 @@ class _BaseTime(TimeEntity):
             self._unsub = None
 
 
+# -------------------------------------------------
+# PRIMARY WINDOW
+# -------------------------------------------------
+
 class SchedulerStartTime(_BaseTime):
-    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
@@ -47,7 +62,7 @@ class SchedulerStartTime(_BaseTime):
         self._unsub = async_dispatcher_connect(
             self.hass,
             f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}",
-            self.async_write_ha_state
+            self.async_write_ha_state,
         )
 
     @property
@@ -59,7 +74,6 @@ class SchedulerStartTime(_BaseTime):
 
 
 class SchedulerEndTime(_BaseTime):
-    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
@@ -70,7 +84,7 @@ class SchedulerEndTime(_BaseTime):
         self._unsub = async_dispatcher_connect(
             self.hass,
             f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}",
-            self.async_write_ha_state
+            self.async_write_ha_state,
         )
 
     @property
@@ -79,3 +93,59 @@ class SchedulerEndTime(_BaseTime):
 
     async def async_set_value(self, value: dt_time):
         await self.scheduler.async_set_option(CONF_END, value.strftime("%H:%M:%S"))
+
+
+# -------------------------------------------------
+# SECOND WINDOW
+# -------------------------------------------------
+
+class SchedulerSecondStartTime(_BaseTime):
+
+    def __init__(self, entry, scheduler):
+        super().__init__(entry, scheduler)
+        self._attr_name = f"{entry.title} Second Start Time"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_start2"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_START2_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state,
+        )
+
+    @property
+    def available(self):
+        return self.scheduler.state.second_enabled
+
+    @property
+    def native_value(self):
+        return self.scheduler.state.second_start
+
+    async def async_set_value(self, value: dt_time):
+        await self.scheduler.async_set_option(CONF_SECOND_START, value.strftime("%H:%M:%S"))
+
+
+class SchedulerSecondEndTime(_BaseTime):
+
+    def __init__(self, entry, scheduler):
+        super().__init__(entry, scheduler)
+        self._attr_name = f"{entry.title} Second End Time"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_end2"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_END2_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state,
+        )
+
+    @property
+    def available(self):
+        return self.scheduler.state.second_enabled
+
+    @property
+    def native_value(self):
+        return self.scheduler.state.second_end
+
+    async def async_set_value(self, value: dt_time):
+        await self.scheduler.async_set_option(CONF_SECOND_END, value.strftime("%H:%M:%S"))

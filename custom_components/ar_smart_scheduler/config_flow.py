@@ -20,6 +20,14 @@ from .const import (
     DEFAULT_START,
     DEFAULT_END,
     WEEKDAY_KEYS,
+
+    # NEW: second window
+    CONF_SECOND_ENABLED,
+    CONF_SECOND_START,
+    CONF_SECOND_END,
+    DEFAULT_SECOND_ENABLED,
+    DEFAULT_SECOND_START,
+    DEFAULT_SECOND_END,
 )
 
 CONF_DEVICE_TYPE = "device_type"
@@ -239,7 +247,7 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
 
 
 class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 6
+    VERSION = 7  # bump because we added new options keys
 
     def __init__(self):
         self._name = None
@@ -266,6 +274,11 @@ class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_START: user_input.get(CONF_START, DEFAULT_START),
                 CONF_END: user_input.get(CONF_END, DEFAULT_END),
                 CONF_WEEKDAYS: user_input.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS),
+
+                # NEW base options
+                CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
+                CONF_SECOND_START: user_input.get(CONF_SECOND_START, DEFAULT_SECOND_START),
+                CONF_SECOND_END: user_input.get(CONF_SECOND_END, DEFAULT_SECOND_END),
             }
             return await self.async_step_actions()
 
@@ -283,6 +296,11 @@ class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_WEEKDAYS, default=DEFAULT_WEEKDAYS): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
                 ),
+
+                # NEW: second window fields
+                vol.Optional(CONF_SECOND_ENABLED, default=DEFAULT_SECOND_ENABLED): bool,
+                vol.Optional(CONF_SECOND_START, default=DEFAULT_SECOND_START): selector.TextSelector(),
+                vol.Optional(CONF_SECOND_END, default=DEFAULT_SECOND_END): selector.TextSelector(),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -318,23 +336,42 @@ class ARSmartSchedulerOptionsFlow(config_entries.OptionsFlow):
         self._base = None
 
     async def async_step_init(self, user_input=None):
+        opts = dict(self._entry.options or {})
+
         if user_input is not None:
             self._base = dict(user_input)
             targets = self._entry.data.get(CONF_TARGET_ENTITY)
             self._device_type = _detect_type(targets)
             return await self.async_step_actions()
 
-        opts = dict(self._entry.options or {})
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_ENABLED, default=bool(opts.get(CONF_ENABLED, True))): bool,
-                vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START)): selector.TextSelector(),
-                vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END)): selector.TextSelector(),
-                vol.Required(CONF_WEEKDAYS, default=opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
-                ),
-            }
-        )
+        second_enabled = bool(opts.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED))
+
+        # Show conditional schema: only show 2nd times if enabled
+        base_schema = {
+            vol.Required(CONF_ENABLED, default=bool(opts.get(CONF_ENABLED, True))): bool,
+            vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START)): selector.TextSelector(),
+            vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END)): selector.TextSelector(),
+            vol.Required(CONF_WEEKDAYS, default=opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
+            ),
+
+            # NEW: 2nd window toggle
+            vol.Required(CONF_SECOND_ENABLED, default=second_enabled): bool,
+        }
+
+        if second_enabled:
+            base_schema.update({
+                vol.Required(CONF_SECOND_START, default=opts.get(CONF_SECOND_START, DEFAULT_SECOND_START)): selector.TextSelector(),
+                vol.Required(CONF_SECOND_END, default=opts.get(CONF_SECOND_END, DEFAULT_SECOND_END)): selector.TextSelector(),
+            })
+        else:
+            # keep values but don't force user to re-enter them
+            base_schema.update({
+                vol.Optional(CONF_SECOND_START, default=opts.get(CONF_SECOND_START, DEFAULT_SECOND_START)): selector.TextSelector(),
+                vol.Optional(CONF_SECOND_END, default=opts.get(CONF_SECOND_END, DEFAULT_SECOND_END)): selector.TextSelector(),
+            })
+
+        schema = vol.Schema(base_schema)
         return self.async_show_form(step_id="init", data_schema=schema)
 
     async def async_step_actions(self, user_input=None):
