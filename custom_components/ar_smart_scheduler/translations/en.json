@@ -3,13 +3,24 @@
     "step": {
       "user": {
         "title": "Create Scheduler",
-        "description": "Select an entity and set start/end times. Users can adjust times from the dashboard without admin access.",
+        "description": "Select entities, choose time or sunrise/sunset triggers, and set the action profile.",
         "data": {
           "name": "Name",
-          "target_entity": "Entity to control",
-          "start_time": "Start time (HH:MM:SS)",
-          "end_time": "End time (HH:MM:SS)",
-          "weekdays": "Weekdays"
+          "target_entity": "Entities to control",
+          "start_time": "Start time (used when trigger = time)",
+          "start_trigger": "Start trigger",
+          "start_offset": "Start offset (minutes)",
+          "end_time": "End time (used when trigger = time)",
+          "end_trigger": "End trigger",
+          "end_offset": "End offset (minutes)",
+          "weekdays": "Weekdays",
+          "second_enabled": "Enable second window",
+          "second_start_time": "Second start time (used when trigger = time)",
+          "second_start_trigger": "Second start trigger",
+          "second_start_offset": "Second start offset (minutes)",
+          "second_end_time": "Second end time (used when trigger = time)",
+          "second_end_trigger": "Second end trigger",
+          "second_end_offset": "Second end offset (minutes)"
         }
       }
     }
