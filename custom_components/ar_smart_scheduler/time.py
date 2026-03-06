@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import time as dt_time
 
 from homeassistant.components.time import TimeEntity
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import (
     DOMAIN,
@@ -12,11 +12,11 @@ from .const import (
     CONF_END,
     CONF_SECOND_START,
     CONF_SECOND_END,
+    TRIGGER_TIME,
     SIGNAL_START_UPDATED,
     SIGNAL_END_UPDATED,
     SIGNAL_START2_UPDATED,
     SIGNAL_END2_UPDATED,
-    SIGNAL_UPDATED,
 )
 
 
@@ -47,12 +47,7 @@ class _BaseTime(TimeEntity):
             self._unsub = None
 
 
-# -------------------------------------------------
-# PRIMARY WINDOW
-# -------------------------------------------------
-
 class SchedulerStartTime(_BaseTime):
-
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
         self._attr_name = f"{entry.title} Start Time"
@@ -66,6 +61,10 @@ class SchedulerStartTime(_BaseTime):
         )
 
     @property
+    def available(self):
+        return self.scheduler.state.start_trigger == TRIGGER_TIME
+
+    @property
     def native_value(self):
         return self.scheduler.state.start
 
@@ -74,7 +73,6 @@ class SchedulerStartTime(_BaseTime):
 
 
 class SchedulerEndTime(_BaseTime):
-
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
         self._attr_name = f"{entry.title} End Time"
@@ -88,6 +86,10 @@ class SchedulerEndTime(_BaseTime):
         )
 
     @property
+    def available(self):
+        return self.scheduler.state.end_trigger == TRIGGER_TIME
+
+    @property
     def native_value(self):
         return self.scheduler.state.end
 
@@ -95,12 +97,7 @@ class SchedulerEndTime(_BaseTime):
         await self.scheduler.async_set_option(CONF_END, value.strftime("%H:%M:%S"))
 
 
-# -------------------------------------------------
-# SECOND WINDOW
-# -------------------------------------------------
-
 class SchedulerSecondStartTime(_BaseTime):
-
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
         self._attr_name = f"{entry.title} Second Start Time"
@@ -115,7 +112,7 @@ class SchedulerSecondStartTime(_BaseTime):
 
     @property
     def available(self):
-        return self.scheduler.state.second_enabled
+        return self.scheduler.state.second_enabled and self.scheduler.state.second_start_trigger == TRIGGER_TIME
 
     @property
     def native_value(self):
@@ -126,7 +123,6 @@ class SchedulerSecondStartTime(_BaseTime):
 
 
 class SchedulerSecondEndTime(_BaseTime):
-
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
         self._attr_name = f"{entry.title} Second End Time"
@@ -141,7 +137,7 @@ class SchedulerSecondEndTime(_BaseTime):
 
     @property
     def available(self):
-        return self.scheduler.state.second_enabled
+        return self.scheduler.state.second_enabled and self.scheduler.state.second_end_trigger == TRIGGER_TIME
 
     @property
     def native_value(self):

@@ -6,12 +6,18 @@ from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
+    DEVICE_TYPES,
+    TRIGGER_TYPES,
     CONF_NAME,
     CONF_TARGET_ENTITY,
     CONF_WEEKDAYS,
     CONF_START,
     CONF_END,
     CONF_ENABLED,
+    CONF_START_TRIGGER,
+    CONF_END_TRIGGER,
+    CONF_START_OFFSET,
+    CONF_END_OFFSET,
     CONF_START_SERVICE,
     CONF_END_SERVICE,
     CONF_START_DATA,
@@ -19,41 +25,43 @@ from .const import (
     DEFAULT_WEEKDAYS,
     DEFAULT_START,
     DEFAULT_END,
+    DEFAULT_START_TRIGGER,
+    DEFAULT_END_TRIGGER,
+    DEFAULT_START_OFFSET,
+    DEFAULT_END_OFFSET,
     WEEKDAY_KEYS,
-
-    # NEW: second window
     CONF_SECOND_ENABLED,
     CONF_SECOND_START,
     CONF_SECOND_END,
+    CONF_SECOND_START_TRIGGER,
+    CONF_SECOND_END_TRIGGER,
+    CONF_SECOND_START_OFFSET,
+    CONF_SECOND_END_OFFSET,
     DEFAULT_SECOND_ENABLED,
     DEFAULT_SECOND_START,
     DEFAULT_SECOND_END,
+    DEFAULT_SECOND_START_TRIGGER,
+    DEFAULT_SECOND_END_TRIGGER,
+    DEFAULT_SECOND_START_OFFSET,
+    DEFAULT_SECOND_END_OFFSET,
+    DEFAULT_COVER_START_ACTION,
+    DEFAULT_COVER_END_ACTION,
 )
 
 CONF_DEVICE_TYPE = "device_type"
-DEVICE_TYPES = ["auto", "cover", "onoff", "light"]
 
-# ----- Cover -----
 COVER_ACTIONS = ["open", "close", "position"]
 COVER_ACTION_TO_SERVICE = {
     "open": "open_cover",
     "close": "close_cover",
     "position": "set_cover_position",
 }
-DEFAULT_COVER_START_ACTION = "open"
-DEFAULT_COVER_END_ACTION = "close"
 
-# ----- On/Off -----
 ONOFF_ACTIONS = ["on", "off"]
 ONOFF_ACTION_TO_SERVICE = {"on": "turn_on", "off": "turn_off"}
 
-# ----- Light -----
 LIGHT_ACTIONS = ["on", "off", "brightness"]
 
-
-# -------------------------------------------------
-# Helpers
-# -------------------------------------------------
 
 def _normalize_entity_ids(entity_ids) -> list[str]:
     if not entity_ids:
@@ -212,29 +220,13 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
     if device_type == "light":
         start_action = user_input.get("light_start_action", "brightness")
         end_action = user_input.get("light_end_action", "off")
-        start_brightness = int(user_input.get("light_start_brightness", 50))
-        end_brightness = int(user_input.get("light_end_brightness", 10))
+        start_bri = int(user_input.get("light_start_brightness", 50))
+        end_bri = int(user_input.get("light_end_brightness", 10))
 
-        if start_action == "brightness":
-            out[CONF_START_SERVICE] = "turn_on"
-            out[CONF_START_DATA] = {"brightness_pct": start_brightness}
-        elif start_action == "on":
-            out[CONF_START_SERVICE] = "turn_on"
-            out[CONF_START_DATA] = {}
-        else:
-            out[CONF_START_SERVICE] = "turn_off"
-            out[CONF_START_DATA] = {}
-
-        if end_action == "brightness":
-            out[CONF_END_SERVICE] = "turn_on"
-            out[CONF_END_DATA] = {"brightness_pct": end_brightness}
-        elif end_action == "on":
-            out[CONF_END_SERVICE] = "turn_on"
-            out[CONF_END_DATA] = {}
-        else:
-            out[CONF_END_SERVICE] = "turn_off"
-            out[CONF_END_DATA] = {}
-
+        out[CONF_START_SERVICE] = "turn_on" if start_action in ("on", "brightness") else "turn_off"
+        out[CONF_END_SERVICE] = "turn_on" if end_action in ("on", "brightness") else "turn_off"
+        out[CONF_START_DATA] = {"brightness_pct": start_bri} if start_action == "brightness" else {}
+        out[CONF_END_DATA] = {"brightness_pct": end_bri} if end_action == "brightness" else {}
         return out
 
     start_action = user_input.get("onoff_start_action", "on")
@@ -247,9 +239,9 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
 
 
 class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 7  # bump because we added new options keys
+    VERSION = 1
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._name = None
         self._entity_ids = None
         self._device_type = None
@@ -258,14 +250,12 @@ class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         if user_input is not None:
             self._name = user_input[CONF_NAME]
-            self._entity_ids = user_input[CONF_TARGET_ENTITY]
+            self._entity_ids = _normalize_entity_ids(user_input[CONF_TARGET_ENTITY])
+            requested_type = user_input.get(CONF_DEVICE_TYPE, "auto")
+            self._device_type = _detect_type(self._entity_ids) if requested_type == "auto" else requested_type
 
-            chosen = user_input.get(CONF_DEVICE_TYPE, "auto")
-            self._device_type = _detect_type(self._entity_ids) if chosen == "auto" else chosen
-
-            ents = _normalize_entity_ids(self._entity_ids)
+            ents = self._entity_ids or []
             first = ents[0] if ents else "none"
-
             await self.async_set_unique_id(f"{DOMAIN}:{first}:{self._name}")
             self._abort_if_unique_id_configured()
 
@@ -274,11 +264,17 @@ class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_START: user_input.get(CONF_START, DEFAULT_START),
                 CONF_END: user_input.get(CONF_END, DEFAULT_END),
                 CONF_WEEKDAYS: user_input.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS),
-
-                # NEW base options
+                CONF_START_TRIGGER: user_input.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER),
+                CONF_END_TRIGGER: user_input.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER),
+                CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)),
+                CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)),
                 CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
                 CONF_SECOND_START: user_input.get(CONF_SECOND_START, DEFAULT_SECOND_START),
                 CONF_SECOND_END: user_input.get(CONF_SECOND_END, DEFAULT_SECOND_END),
+                CONF_SECOND_START_TRIGGER: user_input.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER),
+                CONF_SECOND_END_TRIGGER: user_input.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER),
+                CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET)),
+                CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET)),
             }
             return await self.async_step_actions()
 
@@ -292,15 +288,37 @@ class ARSmartSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     selector.SelectSelectorConfig(options=DEVICE_TYPES)
                 ),
                 vol.Optional(CONF_START, default=DEFAULT_START): selector.TextSelector(),
+                vol.Optional(CONF_START_TRIGGER, default=DEFAULT_START_TRIGGER): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                ),
+                vol.Optional(CONF_START_OFFSET, default=DEFAULT_START_OFFSET): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
                 vol.Optional(CONF_END, default=DEFAULT_END): selector.TextSelector(),
+                vol.Optional(CONF_END_TRIGGER, default=DEFAULT_END_TRIGGER): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                ),
+                vol.Optional(CONF_END_OFFSET, default=DEFAULT_END_OFFSET): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
                 vol.Optional(CONF_WEEKDAYS, default=DEFAULT_WEEKDAYS): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
                 ),
-
-                # NEW: second window fields
                 vol.Optional(CONF_SECOND_ENABLED, default=DEFAULT_SECOND_ENABLED): bool,
                 vol.Optional(CONF_SECOND_START, default=DEFAULT_SECOND_START): selector.TextSelector(),
+                vol.Optional(CONF_SECOND_START_TRIGGER, default=DEFAULT_SECOND_START_TRIGGER): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                ),
+                vol.Optional(CONF_SECOND_START_OFFSET, default=DEFAULT_SECOND_START_OFFSET): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
                 vol.Optional(CONF_SECOND_END, default=DEFAULT_SECOND_END): selector.TextSelector(),
+                vol.Optional(CONF_SECOND_END_TRIGGER, default=DEFAULT_SECOND_END_TRIGGER): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                ),
+                vol.Optional(CONF_SECOND_END_OFFSET, default=DEFAULT_SECOND_END_OFFSET): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -346,30 +364,66 @@ class ARSmartSchedulerOptionsFlow(config_entries.OptionsFlow):
 
         second_enabled = bool(opts.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED))
 
-        # Show conditional schema: only show 2nd times if enabled
         base_schema = {
             vol.Required(CONF_ENABLED, default=bool(opts.get(CONF_ENABLED, True))): bool,
             vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START)): selector.TextSelector(),
+            vol.Required(CONF_START_TRIGGER, default=opts.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+            ),
+            vol.Required(CONF_START_OFFSET, default=int(opts.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+            ),
             vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END)): selector.TextSelector(),
+            vol.Required(CONF_END_TRIGGER, default=opts.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+            ),
+            vol.Required(CONF_END_OFFSET, default=int(opts.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+            ),
             vol.Required(CONF_WEEKDAYS, default=opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
             ),
-
-            # NEW: 2nd window toggle
             vol.Required(CONF_SECOND_ENABLED, default=second_enabled): bool,
         }
 
         if second_enabled:
-            base_schema.update({
-                vol.Required(CONF_SECOND_START, default=opts.get(CONF_SECOND_START, DEFAULT_SECOND_START)): selector.TextSelector(),
-                vol.Required(CONF_SECOND_END, default=opts.get(CONF_SECOND_END, DEFAULT_SECOND_END)): selector.TextSelector(),
-            })
+            base_schema.update(
+                {
+                    vol.Required(CONF_SECOND_START, default=opts.get(CONF_SECOND_START, DEFAULT_SECOND_START)): selector.TextSelector(),
+                    vol.Required(CONF_SECOND_START_TRIGGER, default=opts.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER)): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                    ),
+                    vol.Required(CONF_SECOND_START_OFFSET, default=int(opts.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET))): selector.NumberSelector(
+                        selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                    ),
+                    vol.Required(CONF_SECOND_END, default=opts.get(CONF_SECOND_END, DEFAULT_SECOND_END)): selector.TextSelector(),
+                    vol.Required(CONF_SECOND_END_TRIGGER, default=opts.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER)): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                    ),
+                    vol.Required(CONF_SECOND_END_OFFSET, default=int(opts.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET))): selector.NumberSelector(
+                        selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                    ),
+                }
+            )
         else:
-            # keep values but don't force user to re-enter them
-            base_schema.update({
-                vol.Optional(CONF_SECOND_START, default=opts.get(CONF_SECOND_START, DEFAULT_SECOND_START)): selector.TextSelector(),
-                vol.Optional(CONF_SECOND_END, default=opts.get(CONF_SECOND_END, DEFAULT_SECOND_END)): selector.TextSelector(),
-            })
+            base_schema.update(
+                {
+                    vol.Optional(CONF_SECOND_START, default=opts.get(CONF_SECOND_START, DEFAULT_SECOND_START)): selector.TextSelector(),
+                    vol.Optional(CONF_SECOND_START_TRIGGER, default=opts.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER)): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                    ),
+                    vol.Optional(CONF_SECOND_START_OFFSET, default=int(opts.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET))): selector.NumberSelector(
+                        selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                    ),
+                    vol.Optional(CONF_SECOND_END, default=opts.get(CONF_SECOND_END, DEFAULT_SECOND_END)): selector.TextSelector(),
+                    vol.Optional(CONF_SECOND_END_TRIGGER, default=opts.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER)): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+                    ),
+                    vol.Optional(CONF_SECOND_END_OFFSET, default=int(opts.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET))): selector.NumberSelector(
+                        selector.NumberSelectorConfig(min=-180, max=180, step=1, mode=selector.NumberSelectorMode.BOX)
+                    ),
+                }
+            )
 
         schema = vol.Schema(base_schema)
         return self.async_show_form(step_id="init", data_schema=schema)
