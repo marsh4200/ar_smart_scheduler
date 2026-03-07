@@ -151,7 +151,6 @@ class ARScheduler:
     def _load(self) -> None:
         opts = dict(self.entry.options or {})
 
-        # ---- MIGRATION SAFETY ----
         opts.setdefault(CONF_START_TRIGGER, DEFAULT_START_TRIGGER)
         opts.setdefault(CONF_END_TRIGGER, DEFAULT_END_TRIGGER)
         opts.setdefault(CONF_START_OFFSET, DEFAULT_START_OFFSET)
@@ -371,3 +370,22 @@ class ARScheduler:
             return
 
         await self._call_targets(self.state.end_service, self.state.end_data)
+
+    async def async_set_option(self, key: str, value: Any) -> None:
+        """Update config entry option and reload scheduler."""
+
+        options = dict(self.entry.options or {})
+        options[key] = value
+
+        self.hass.config_entries.async_update_entry(
+            self.entry,
+            options=options,
+        )
+
+        self._load()
+        self._setup_tracks()
+
+        async_dispatcher_send(
+            self.hass,
+            f"{SIGNAL_UPDATED}_{self.entry.entry_id}",
+        )
