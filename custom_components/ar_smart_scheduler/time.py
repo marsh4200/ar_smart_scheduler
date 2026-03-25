@@ -33,7 +33,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class _BaseTime(TimeEntity):
     should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry, scheduler):
@@ -50,7 +50,7 @@ class _BaseTime(TimeEntity):
 class SchedulerStartTime(_BaseTime):
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
-        self._attr_name = f"{entry.title} Start Time"
+        self._attr_name = "Start Time"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_start"
 
     async def async_added_to_hass(self):
@@ -75,7 +75,7 @@ class SchedulerStartTime(_BaseTime):
 class SchedulerEndTime(_BaseTime):
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
-        self._attr_name = f"{entry.title} End Time"
+        self._attr_name = "End Time"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_end"
 
     async def async_added_to_hass(self):
@@ -100,7 +100,7 @@ class SchedulerEndTime(_BaseTime):
 class SchedulerSecondStartTime(_BaseTime):
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
-        self._attr_name = f"{entry.title} Second Start Time"
+        self._attr_name = "Second Start Time"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_start2"
 
     async def async_added_to_hass(self):
@@ -125,7 +125,7 @@ class SchedulerSecondStartTime(_BaseTime):
 class SchedulerSecondEndTime(_BaseTime):
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
-        self._attr_name = f"{entry.title} Second End Time"
+        self._attr_name = "Second End Time"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_end2"
 
     async def async_added_to_hass(self):

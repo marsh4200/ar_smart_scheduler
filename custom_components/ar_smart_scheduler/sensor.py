@@ -6,11 +6,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, CONF_TARGET_ENTITY, SIGNAL_UPDATED
+from .const import CONF_NAME, DOMAIN, SIGNAL_UPDATED
 
 
 class ARSchedulerInfo(SensorEntity):
     _attr_has_entity_name = True
+    _attr_should_poll = False
     _attr_icon = "mdi:information-outline"
 
     def __init__(self, entry: ConfigEntry, scheduler) -> None:
@@ -42,7 +43,9 @@ class ARSchedulerInfo(SensorEntity):
     @property
     def extra_state_attributes(self):
         return {
-            "target_entities": self.entry.data.get(CONF_TARGET_ENTITY),
+            "schedule_name": self.entry.data.get(CONF_NAME, self.entry.title),
+            "target_entities": self.scheduler.targets,
+            "target_count": len(self.scheduler.targets),
             "start_time": self.scheduler.state.start.strftime("%H:%M:%S"),
             "end_time": self.scheduler.state.end.strftime("%H:%M:%S"),
             "start_trigger": self.scheduler.state.start_trigger,

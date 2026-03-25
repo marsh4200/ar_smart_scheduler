@@ -23,7 +23,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class _BaseSwitch(SwitchEntity):
     should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(self, entry, scheduler):
         self.entry = entry
@@ -48,7 +48,7 @@ class SchedulerEnabledSwitch(_BaseSwitch):
 
     def __init__(self, entry, scheduler):
         super().__init__(entry, scheduler)
-        self._attr_name = f"{entry.title} Schedule Enabled"
+        self._attr_name = "Schedule Enabled"
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_enabled"
 
     @property
@@ -69,7 +69,7 @@ class WeekdaySwitch(_BaseSwitch):
         super().__init__(entry, scheduler)
         self.day = day
         self.day_num = WEEKDAY_MAP[day]
-        self._attr_name = f"{entry.title} {day.upper()}"
+        self._attr_name = day.upper()
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_{day}"
 
     @property
