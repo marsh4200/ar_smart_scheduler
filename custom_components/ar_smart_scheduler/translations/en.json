@@ -1,5 +1,8 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "A scheduler with the same name and entities already exists."
+    },
     "step": {
       "user": {
         "title": "Create Scheduler",
@@ -7,6 +10,8 @@
         "data": {
           "name": "Name",
           "target_entity": "Entities to control",
+          "device_type": "Action profile",
+          "enabled": "Scheduler enabled",
           "start_time": "Start time (used when trigger = time)",
           "start_trigger": "Start trigger",
           "start_offset": "Start offset (minutes)",
@@ -21,6 +26,66 @@
           "second_end_time": "Second end time (used when trigger = time)",
           "second_end_trigger": "Second end trigger",
           "second_end_offset": "Second end offset (minutes)"
+        }
+      },
+      "actions": {
+        "title": "Actions",
+        "description": "Choose what should happen when the scheduler starts and ends.",
+        "data": {
+          "cover_start_action": "Start action",
+          "cover_start_position": "Start position",
+          "cover_end_action": "End action",
+          "cover_end_position": "End position",
+          "light_start_action": "Start action",
+          "light_start_brightness": "Start brightness",
+          "light_end_action": "End action",
+          "light_end_brightness": "End brightness",
+          "onoff_start_action": "Start action",
+          "onoff_end_action": "End action"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit Scheduler",
+        "description": "Update the name, selected entities, schedule, and trigger mode.",
+        "data": {
+          "name": "Name",
+          "target_entity": "Entities to control",
+          "device_type": "Action profile",
+          "enabled": "Scheduler enabled",
+          "start_time": "Start time (used when trigger = time)",
+          "start_trigger": "Start trigger",
+          "start_offset": "Start offset (minutes)",
+          "end_time": "End time (used when trigger = time)",
+          "end_trigger": "End trigger",
+          "end_offset": "End offset (minutes)",
+          "weekdays": "Weekdays",
+          "second_enabled": "Enable second window",
+          "second_start_time": "Second start time (used when trigger = time)",
+          "second_start_trigger": "Second start trigger",
+          "second_start_offset": "Second start offset (minutes)",
+          "second_end_time": "Second end time (used when trigger = time)",
+          "second_end_trigger": "Second end trigger",
+          "second_end_offset": "Second end offset (minutes)"
+        }
+      },
+      "actions": {
+        "title": "Actions",
+        "description": "Choose what should happen when the scheduler starts and ends.",
+        "data": {
+          "cover_start_action": "Start action",
+          "cover_start_position": "Start position",
+          "cover_end_action": "End action",
+          "cover_end_position": "End position",
+          "light_start_action": "Start action",
+          "light_start_brightness": "Start brightness",
+          "light_end_action": "End action",
+          "light_end_brightness": "End brightness",
+          "onoff_start_action": "Start action",
+          "onoff_end_action": "End action"
         }
       }
     }
