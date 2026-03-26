@@ -266,16 +266,12 @@ def _general_schema(data: dict, opts: dict) -> vol.Schema:
 def _schedule_schema(opts: dict) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START)): _time_selector(),
             vol.Required(CONF_START_TRIGGER, default=opts.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=TRIGGER_TYPES)
             ),
-            vol.Required(CONF_START_OFFSET, default=int(opts.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))): _number_selector(),
-            vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END)): _time_selector(),
             vol.Required(CONF_END_TRIGGER, default=opts.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=TRIGGER_TYPES)
             ),
-            vol.Required(CONF_END_OFFSET, default=int(opts.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))): _number_selector(),
             vol.Required(CONF_WEEKDAYS, default=opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
             ),
@@ -283,12 +279,49 @@ def _schedule_schema(opts: dict) -> vol.Schema:
     )
 
 
+def _schedule_details_schema(opts: dict) -> vol.Schema:
+    schema: dict = {}
+
+    if opts.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER) == "time":
+        schema[vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START))] = _time_selector()
+    else:
+        schema[vol.Required(CONF_START_OFFSET, default=int(opts.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)))] = _number_selector()
+
+    if opts.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER) == "time":
+        schema[vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END))] = _time_selector()
+    else:
+        schema[vol.Required(CONF_END_OFFSET, default=int(opts.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)))] = _number_selector()
+
+    return vol.Schema(schema)
+
+
 def _second_window_schema(opts: dict) -> vol.Schema:
+    second_enabled = bool(opts.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED))
+
+    return vol.Schema(
+        {
+            vol.Required(CONF_SECOND_ENABLED, default=second_enabled): bool,
+            vol.Optional(
+                CONF_SECOND_START_TRIGGER,
+                default=opts.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER),
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=TRIGGER_TYPES)),
+            vol.Optional(
+                CONF_SECOND_END_TRIGGER,
+                default=opts.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER),
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=TRIGGER_TYPES)),
+        }
+    )
+
+
+def _second_window_details_schema(opts: dict) -> vol.Schema:
     second_enabled = bool(opts.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED))
 
     schema: dict = {
         vol.Required(CONF_SECOND_ENABLED, default=second_enabled): bool,
     }
+
+    if not second_enabled:
+        return vol.Schema(schema)
 
     second_fields = {
         CONF_SECOND_START: opts.get(CONF_SECOND_START, DEFAULT_SECOND_START),
@@ -299,21 +332,16 @@ def _second_window_schema(opts: dict) -> vol.Schema:
         CONF_SECOND_END_OFFSET: int(opts.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET)),
     }
 
-    key_builder = vol.Required if second_enabled else vol.Optional
-    schema.update(
-        {
-            key_builder(CONF_SECOND_START, default=second_fields[CONF_SECOND_START]): _time_selector(),
-            key_builder(CONF_SECOND_START_TRIGGER, default=second_fields[CONF_SECOND_START_TRIGGER]): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=TRIGGER_TYPES)
-            ),
-            key_builder(CONF_SECOND_START_OFFSET, default=second_fields[CONF_SECOND_START_OFFSET]): _number_selector(),
-            key_builder(CONF_SECOND_END, default=second_fields[CONF_SECOND_END]): _time_selector(),
-            key_builder(CONF_SECOND_END_TRIGGER, default=second_fields[CONF_SECOND_END_TRIGGER]): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=TRIGGER_TYPES)
-            ),
-            key_builder(CONF_SECOND_END_OFFSET, default=second_fields[CONF_SECOND_END_OFFSET]): _number_selector(),
-        }
-    )
+    if second_fields[CONF_SECOND_START_TRIGGER] == "time":
+        schema[vol.Required(CONF_SECOND_START, default=second_fields[CONF_SECOND_START])] = _time_selector()
+    else:
+        schema[vol.Required(CONF_SECOND_START_OFFSET, default=second_fields[CONF_SECOND_START_OFFSET])] = _number_selector()
+
+    if second_fields[CONF_SECOND_END_TRIGGER] == "time":
+        schema[vol.Required(CONF_SECOND_END, default=second_fields[CONF_SECOND_END])] = _time_selector()
+    else:
+        schema[vol.Required(CONF_SECOND_END_OFFSET, default=second_fields[CONF_SECOND_END_OFFSET])] = _number_selector()
+
     return vol.Schema(schema)
 
 
@@ -341,11 +369,16 @@ class _BaseSchedulerFlow:
 
     def _prepare_schedule(self, user_input: dict) -> dict:
         return {
-            CONF_START: _normalize_time_input(user_input.get(CONF_START, DEFAULT_START)),
-            CONF_END: _normalize_time_input(user_input.get(CONF_END, DEFAULT_END)),
             CONF_WEEKDAYS: user_input.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS),
             CONF_START_TRIGGER: user_input.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER),
             CONF_END_TRIGGER: user_input.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER),
+        }
+
+    def _prepare_schedule_details(self, user_input: dict, current: dict | None = None) -> dict:
+        current = current or {}
+        return {
+            CONF_START: _normalize_time_input(user_input.get(CONF_START, current.get(CONF_START, DEFAULT_START))),
+            CONF_END: _normalize_time_input(user_input.get(CONF_END, current.get(CONF_END, DEFAULT_END))),
             CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)),
             CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)),
         }
@@ -353,10 +386,16 @@ class _BaseSchedulerFlow:
     def _prepare_second_window(self, user_input: dict) -> dict:
         return {
             CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
-            CONF_SECOND_START: _normalize_time_input(user_input.get(CONF_SECOND_START, DEFAULT_SECOND_START)),
-            CONF_SECOND_END: _normalize_time_input(user_input.get(CONF_SECOND_END, DEFAULT_SECOND_END)),
             CONF_SECOND_START_TRIGGER: user_input.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER),
             CONF_SECOND_END_TRIGGER: user_input.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER),
+        }
+
+    def _prepare_second_window_details(self, user_input: dict, current: dict | None = None) -> dict:
+        current = current or {}
+        return {
+            CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
+            CONF_SECOND_START: _normalize_time_input(user_input.get(CONF_SECOND_START, current.get(CONF_SECOND_START, DEFAULT_SECOND_START))),
+            CONF_SECOND_END: _normalize_time_input(user_input.get(CONF_SECOND_END, current.get(CONF_SECOND_END, DEFAULT_SECOND_END))),
             CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET)),
             CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET)),
         }
@@ -405,21 +444,41 @@ class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, 
     async def async_step_schedule(self, user_input=None):
         if user_input is not None:
             self._options.update(self._prepare_schedule(user_input))
-            return await self.async_step_second_window()
+            return await self.async_step_schedule_details()
 
         return self.async_show_form(
             step_id="schedule",
             data_schema=_schedule_schema(self._options),
         )
 
+    async def async_step_schedule_details(self, user_input=None):
+        if user_input is not None:
+            self._options.update(self._prepare_schedule_details(user_input, self._options))
+            return await self.async_step_second_window()
+
+        return self.async_show_form(
+            step_id="schedule_details",
+            data_schema=_schedule_details_schema(self._options),
+        )
+
     async def async_step_second_window(self, user_input=None):
         if user_input is not None:
             self._options.update(self._prepare_second_window(user_input))
-            return await self.async_step_actions()
+            return await self.async_step_second_window_details()
 
         return self.async_show_form(
             step_id="second_window",
             data_schema=_second_window_schema(self._options),
+        )
+
+    async def async_step_second_window_details(self, user_input=None):
+        if user_input is not None:
+            self._options.update(self._prepare_second_window_details(user_input, self._options))
+            return await self.async_step_actions()
+
+        return self.async_show_form(
+            step_id="second_window_details",
+            data_schema=_second_window_details_schema(self._options),
         )
 
     async def async_step_actions(self, user_input=None):
@@ -452,24 +511,37 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
         self._device_type = None
         self._name = str(entry.data.get(CONF_NAME, entry.title or "Scheduler"))
         self._entity_ids = _normalize_entity_ids(entry.data.get(CONF_TARGET_ENTITY))
+        self._entry_id = entry.entry_id
+        self._pending_schedule: dict | None = None
+        self._pending_second_window: dict | None = None
+
+    def _get_entry(self):
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        return entry or self._entry
 
     async def async_step_init(self, user_input=None):
         return self.async_show_menu(
             step_id="init",
-            menu_options=["general", "schedule", "second_window", "actions"],
+            menu_options={
+                "general": "General",
+                "schedule": "Main schedule",
+                "second_window": "Second window",
+                "actions": "Actions",
+            },
         )
 
     async def async_step_general(self, user_input=None):
         errors: dict[str, str] = {}
-        data = dict(self._entry.data or {})
-        opts = dict(self._entry.options or {})
+        entry = self._get_entry()
+        data = dict(entry.data or {})
+        opts = dict(entry.options or {})
 
         if user_input is not None:
             name, entity_ids, device_type, general_options = self._prepare_general(user_input)
 
             if not entity_ids:
                 errors[CONF_TARGET_ENTITY] = "required"
-            elif self._is_duplicate(name, entity_ids, current_entry_id=self._entry.entry_id):
+            elif self._is_duplicate(name, entity_ids, current_entry_id=entry.entry_id):
                 errors["base"] = "already_configured"
             else:
                 self._name = name
@@ -479,7 +551,7 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
                 updated_options.update(general_options)
 
                 self.hass.config_entries.async_update_entry(
-                    self._entry,
+                    entry,
                     title=self._name,
                     data={
                         CONF_NAME: self._name,
@@ -493,38 +565,73 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
         return self.async_show_form(step_id="general", data_schema=schema, errors=errors)
 
     async def async_step_schedule(self, user_input=None):
-        opts_existing = dict(self._entry.options or {})
+        entry = self._get_entry()
+        opts_existing = dict(entry.options or {})
 
         if user_input is not None:
             out = dict(opts_existing)
             out.update(self._prepare_schedule(user_input))
-
-            self.hass.config_entries.async_update_entry(self._entry, options=out)
-            return self.async_create_entry(title="", data=out)
+            self._pending_schedule = out
+            return await self.async_step_schedule_details()
 
         return self.async_show_form(
             step_id="schedule",
             data_schema=_schedule_schema(opts_existing),
         )
 
+    async def async_step_schedule_details(self, user_input=None):
+        entry = self._get_entry()
+        opts_existing = dict(self._pending_schedule or entry.options or {})
+
+        if user_input is not None:
+            out = dict(opts_existing)
+            out.update(self._prepare_schedule_details(user_input, opts_existing))
+
+            self._pending_schedule = None
+            self.hass.config_entries.async_update_entry(entry, options=out)
+            return self.async_create_entry(title="", data=out)
+
+        return self.async_show_form(
+            step_id="schedule_details",
+            data_schema=_schedule_details_schema(opts_existing),
+        )
+
     async def async_step_second_window(self, user_input=None):
-        opts_existing = dict(self._entry.options or {})
+        entry = self._get_entry()
+        opts_existing = dict(entry.options or {})
 
         if user_input is not None:
             out = dict(opts_existing)
             out.update(self._prepare_second_window(user_input))
-
-            self.hass.config_entries.async_update_entry(self._entry, options=out)
-            return self.async_create_entry(title="", data=out)
+            self._pending_second_window = out
+            return await self.async_step_second_window_details()
 
         return self.async_show_form(
             step_id="second_window",
             data_schema=_second_window_schema(opts_existing),
         )
 
+    async def async_step_second_window_details(self, user_input=None):
+        entry = self._get_entry()
+        opts_existing = dict(self._pending_second_window or entry.options or {})
+
+        if user_input is not None:
+            out = dict(opts_existing)
+            out.update(self._prepare_second_window_details(user_input, opts_existing))
+
+            self._pending_second_window = None
+            self.hass.config_entries.async_update_entry(entry, options=out)
+            return self.async_create_entry(title="", data=out)
+
+        return self.async_show_form(
+            step_id="second_window_details",
+            data_schema=_second_window_details_schema(opts_existing),
+        )
+
     async def async_step_actions(self, user_input=None):
-        opts_existing = dict(self._entry.options or {})
-        entity_ids = _normalize_entity_ids((self._entry.data or {}).get(CONF_TARGET_ENTITY))
+        entry = self._get_entry()
+        opts_existing = dict(entry.options or {})
+        entity_ids = _normalize_entity_ids((entry.data or {}).get(CONF_TARGET_ENTITY))
         requested_type = opts_existing.get(CONF_DEVICE_TYPE, "auto")
         self._device_type = _detect_type(entity_ids) if requested_type == "auto" else requested_type
 
@@ -532,7 +639,7 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
             out = dict(opts_existing)
             out.update(_resolve_action_options(self._device_type, user_input))
 
-            self.hass.config_entries.async_update_entry(self._entry, options=out)
+            self.hass.config_entries.async_update_entry(entry, options=out)
             return self.async_create_entry(title="", data=out)
 
         return self.async_show_form(

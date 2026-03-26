@@ -23,6 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     scheduler = ARScheduler(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = scheduler
+    entry.async_on_unload(entry.add_update_listener(_async_update_entry))
 
     await scheduler.async_start()
 
@@ -41,6 +42,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(
         entry, [Platform(p) for p in PLATFORMS]
     )
+
+
+async def _async_update_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload scheduler state when config entry data or options change."""
+    scheduler: ARScheduler | None = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if scheduler is not None:
+        await scheduler.async_reload_from_entry()
 
 
 # -----------------------------
