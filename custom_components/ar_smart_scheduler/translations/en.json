@@ -3,6 +3,9 @@
     "abort": {
       "already_configured": "A scheduler with the same name and entities already exists."
     },
+    "error": {
+      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, and gate-style covers."
+    },
     "step": {
       "user": {
         "title": "Basic Setup",
@@ -72,6 +75,9 @@
     }
   },
   "options": {
+    "error": {
+      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, and gate-style covers."
+    },
     "step": {
       "init": {
         "title": "Scheduler Settings",
