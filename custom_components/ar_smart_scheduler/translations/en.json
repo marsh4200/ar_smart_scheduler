@@ -5,20 +5,32 @@
     },
     "step": {
       "user": {
-        "title": "Create Scheduler",
-        "description": "Select entities, choose time or sunrise/sunset triggers, and set the action profile.",
+        "title": "Basic Setup",
+        "description": "Choose what this scheduler controls and give it a name.",
         "data": {
           "name": "Name",
           "target_entity": "Entities to control",
           "device_type": "Action profile",
-          "enabled": "Scheduler enabled",
+          "enabled": "Enabled"
+        }
+      },
+      "schedule": {
+        "title": "Main Schedule",
+        "description": "Set when the first schedule window should start and end.",
+        "data": {
           "start_time": "Start time (used when trigger = time)",
           "start_trigger": "Start trigger",
           "start_offset": "Start offset (minutes)",
           "end_time": "End time (used when trigger = time)",
           "end_trigger": "End trigger",
           "end_offset": "End offset (minutes)",
-          "weekdays": "Weekdays",
+          "weekdays": "Weekdays"
+        }
+      },
+      "second_window": {
+        "title": "Second Window",
+        "description": "Optional: add a second daily schedule window.",
+        "data": {
           "second_enabled": "Enable second window",
           "second_start_time": "Second start time (used when trigger = time)",
           "second_start_trigger": "Second start trigger",
@@ -49,20 +61,35 @@
   "options": {
     "step": {
       "init": {
-        "title": "Edit Scheduler",
-        "description": "Update the name, selected entities, schedule, and trigger mode.",
+        "title": "Scheduler Settings"
+      },
+      "general": {
+        "title": "General",
+        "description": "Update the name, entities, and basic scheduler state.",
         "data": {
           "name": "Name",
           "target_entity": "Entities to control",
           "device_type": "Action profile",
-          "enabled": "Scheduler enabled",
+          "enabled": "Enabled"
+        }
+      },
+      "schedule": {
+        "title": "Main Schedule",
+        "description": "Edit the main schedule window.",
+        "data": {
           "start_time": "Start time (used when trigger = time)",
           "start_trigger": "Start trigger",
           "start_offset": "Start offset (minutes)",
           "end_time": "End time (used when trigger = time)",
           "end_trigger": "End trigger",
           "end_offset": "End offset (minutes)",
-          "weekdays": "Weekdays",
+          "weekdays": "Weekdays"
+        }
+      },
+      "second_window": {
+        "title": "Second Window",
+        "description": "Enable or edit the optional second schedule window.",
+        "data": {
           "second_enabled": "Enable second window",
           "second_start_time": "Second start time (used when trigger = time)",
           "second_start_trigger": "Second start trigger",
@@ -88,6 +115,12 @@
           "onoff_end_action": "End action"
         }
       }
+    },
+    "menu_options": {
+      "general": "General",
+      "schedule": "Main schedule",
+      "second_window": "Second window",
+      "actions": "Actions"
     }
   }
 }
