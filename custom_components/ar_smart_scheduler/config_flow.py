@@ -248,31 +248,45 @@ def _number_selector() -> selector.NumberSelector:
     )
 
 
-def _base_schema(data: dict, opts: dict) -> vol.Schema:
+def _general_schema(data: dict, opts: dict) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_NAME, default=data.get(CONF_NAME, "Scheduler")): str,
+            vol.Required(CONF_TARGET_ENTITY, default=_normalize_entity_ids(data.get(CONF_TARGET_ENTITY))): selector.EntitySelector(
+                selector.EntitySelectorConfig(multiple=True)
+            ),
+            vol.Required(CONF_DEVICE_TYPE, default=opts.get(CONF_DEVICE_TYPE, "auto")): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=DEVICE_TYPES)
+            ),
+            vol.Required(CONF_ENABLED, default=bool(opts.get(CONF_ENABLED, True))): bool,
+        }
+    )
+
+
+def _schedule_schema(opts: dict) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START)): _time_selector(),
+            vol.Required(CONF_START_TRIGGER, default=opts.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+            ),
+            vol.Required(CONF_START_OFFSET, default=int(opts.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))): _number_selector(),
+            vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END)): _time_selector(),
+            vol.Required(CONF_END_TRIGGER, default=opts.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=TRIGGER_TYPES)
+            ),
+            vol.Required(CONF_END_OFFSET, default=int(opts.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))): _number_selector(),
+            vol.Required(CONF_WEEKDAYS, default=opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
+            ),
+        }
+    )
+
+
+def _second_window_schema(opts: dict) -> vol.Schema:
     second_enabled = bool(opts.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED))
 
     schema: dict = {
-        vol.Required(CONF_NAME, default=data.get(CONF_NAME, "Scheduler")): str,
-        vol.Required(CONF_TARGET_ENTITY, default=_normalize_entity_ids(data.get(CONF_TARGET_ENTITY))): selector.EntitySelector(
-            selector.EntitySelectorConfig(multiple=True)
-        ),
-        vol.Required(CONF_DEVICE_TYPE, default=opts.get(CONF_DEVICE_TYPE, "auto")): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=DEVICE_TYPES)
-        ),
-        vol.Required(CONF_ENABLED, default=bool(opts.get(CONF_ENABLED, True))): bool,
-        vol.Required(CONF_START, default=opts.get(CONF_START, DEFAULT_START)): _time_selector(),
-        vol.Required(CONF_START_TRIGGER, default=opts.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER)): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=TRIGGER_TYPES)
-        ),
-        vol.Required(CONF_START_OFFSET, default=int(opts.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))): _number_selector(),
-        vol.Required(CONF_END, default=opts.get(CONF_END, DEFAULT_END)): _time_selector(),
-        vol.Required(CONF_END_TRIGGER, default=opts.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER)): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=TRIGGER_TYPES)
-        ),
-        vol.Required(CONF_END_OFFSET, default=int(opts.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))): _number_selector(),
-        vol.Required(CONF_WEEKDAYS, default=opts.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS)): selector.SelectSelector(
-            selector.SelectSelectorConfig(options=WEEKDAY_KEYS, multiple=True)
-        ),
         vol.Required(CONF_SECOND_ENABLED, default=second_enabled): bool,
     }
 
@@ -313,15 +327,20 @@ def _normalize_time_input(value) -> str:
 
 
 class _BaseSchedulerFlow:
-    def _prepare_base(self, user_input: dict) -> tuple[str, list[str], str, dict]:
+    def _prepare_general(self, user_input: dict) -> tuple[str, list[str], str, dict]:
         name = str(user_input[CONF_NAME]).strip() or "Scheduler"
         entity_ids = _normalize_entity_ids(user_input[CONF_TARGET_ENTITY])
         requested_type = user_input.get(CONF_DEVICE_TYPE, "auto")
         device_type = _detect_type(entity_ids) if requested_type == "auto" else requested_type
 
-        base_options = {
+        general_options = {
             CONF_DEVICE_TYPE: requested_type,
             CONF_ENABLED: bool(user_input.get(CONF_ENABLED, True)),
+        }
+        return name, entity_ids, device_type, general_options
+
+    def _prepare_schedule(self, user_input: dict) -> dict:
+        return {
             CONF_START: _normalize_time_input(user_input.get(CONF_START, DEFAULT_START)),
             CONF_END: _normalize_time_input(user_input.get(CONF_END, DEFAULT_END)),
             CONF_WEEKDAYS: user_input.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS),
@@ -329,6 +348,10 @@ class _BaseSchedulerFlow:
             CONF_END_TRIGGER: user_input.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER),
             CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)),
             CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)),
+        }
+
+    def _prepare_second_window(self, user_input: dict) -> dict:
+        return {
             CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
             CONF_SECOND_START: _normalize_time_input(user_input.get(CONF_SECOND_START, DEFAULT_SECOND_START)),
             CONF_SECOND_END: _normalize_time_input(user_input.get(CONF_SECOND_END, DEFAULT_SECOND_END)),
@@ -337,7 +360,6 @@ class _BaseSchedulerFlow:
             CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET)),
             CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET)),
         }
-        return name, entity_ids, device_type, base_options
 
     def _is_duplicate(self, name: str, entity_ids: list[str], current_entry_id: str | None = None) -> bool:
         key = (name.casefold(), tuple(entity_ids))
@@ -358,13 +380,13 @@ class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, 
         self._name = None
         self._entity_ids = None
         self._device_type = None
-        self._base_options = None
+        self._options: dict = {}
 
     async def async_step_user(self, user_input=None):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            name, entity_ids, device_type, base_options = self._prepare_base(user_input)
+            name, entity_ids, device_type, general_options = self._prepare_general(user_input)
 
             if not entity_ids:
                 errors[CONF_TARGET_ENTITY] = "required"
@@ -374,15 +396,35 @@ class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, 
                 self._name = name
                 self._entity_ids = entity_ids
                 self._device_type = device_type
-                self._base_options = base_options
-                return await self.async_step_actions()
+                self._options.update(general_options)
+                return await self.async_step_schedule()
 
-        schema = _base_schema({}, {})
+        schema = _general_schema({}, {})
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_schedule(self, user_input=None):
+        if user_input is not None:
+            self._options.update(self._prepare_schedule(user_input))
+            return await self.async_step_second_window()
+
+        return self.async_show_form(
+            step_id="schedule",
+            data_schema=_schedule_schema(self._options),
+        )
+
+    async def async_step_second_window(self, user_input=None):
+        if user_input is not None:
+            self._options.update(self._prepare_second_window(user_input))
+            return await self.async_step_actions()
+
+        return self.async_show_form(
+            step_id="second_window",
+            data_schema=_second_window_schema(self._options),
+        )
 
     async def async_step_actions(self, user_input=None):
         if user_input is not None:
-            opts = dict(self._base_options or {})
+            opts = dict(self._options)
             opts.update(_resolve_action_options(self._device_type, user_input))
 
             return self.async_create_entry(
@@ -408,17 +450,22 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
     def __init__(self, entry):
         self._entry = entry
         self._device_type = None
-        self._base = None
         self._name = str(entry.data.get(CONF_NAME, entry.title or "Scheduler"))
         self._entity_ids = _normalize_entity_ids(entry.data.get(CONF_TARGET_ENTITY))
 
     async def async_step_init(self, user_input=None):
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["general", "schedule", "second_window", "actions"],
+        )
+
+    async def async_step_general(self, user_input=None):
         errors: dict[str, str] = {}
         data = dict(self._entry.data or {})
         opts = dict(self._entry.options or {})
 
         if user_input is not None:
-            name, entity_ids, device_type, base_options = self._prepare_base(user_input)
+            name, entity_ids, device_type, general_options = self._prepare_general(user_input)
 
             if not entity_ids:
                 errors[CONF_TARGET_ENTITY] = "required"
@@ -428,29 +475,64 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
                 self._name = name
                 self._entity_ids = entity_ids
                 self._device_type = device_type
-                self._base = base_options
-                return await self.async_step_actions()
+                updated_options = dict(opts)
+                updated_options.update(general_options)
 
-        schema = _base_schema(data, opts)
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+                self.hass.config_entries.async_update_entry(
+                    self._entry,
+                    title=self._name,
+                    data={
+                        CONF_NAME: self._name,
+                        CONF_TARGET_ENTITY: self._entity_ids,
+                    },
+                    options=updated_options,
+                )
+                return self.async_create_entry(title="", data=updated_options)
 
-    async def async_step_actions(self, user_input=None):
+        schema = _general_schema(data, opts)
+        return self.async_show_form(step_id="general", data_schema=schema, errors=errors)
+
+    async def async_step_schedule(self, user_input=None):
         opts_existing = dict(self._entry.options or {})
 
         if user_input is not None:
             out = dict(opts_existing)
-            out.update(self._base or {})
+            out.update(self._prepare_schedule(user_input))
+
+            self.hass.config_entries.async_update_entry(self._entry, options=out)
+            return self.async_create_entry(title="", data=out)
+
+        return self.async_show_form(
+            step_id="schedule",
+            data_schema=_schedule_schema(opts_existing),
+        )
+
+    async def async_step_second_window(self, user_input=None):
+        opts_existing = dict(self._entry.options or {})
+
+        if user_input is not None:
+            out = dict(opts_existing)
+            out.update(self._prepare_second_window(user_input))
+
+            self.hass.config_entries.async_update_entry(self._entry, options=out)
+            return self.async_create_entry(title="", data=out)
+
+        return self.async_show_form(
+            step_id="second_window",
+            data_schema=_second_window_schema(opts_existing),
+        )
+
+    async def async_step_actions(self, user_input=None):
+        opts_existing = dict(self._entry.options or {})
+        entity_ids = _normalize_entity_ids((self._entry.data or {}).get(CONF_TARGET_ENTITY))
+        requested_type = opts_existing.get(CONF_DEVICE_TYPE, "auto")
+        self._device_type = _detect_type(entity_ids) if requested_type == "auto" else requested_type
+
+        if user_input is not None:
+            out = dict(opts_existing)
             out.update(_resolve_action_options(self._device_type, user_input))
 
-            self.hass.config_entries.async_update_entry(
-                self._entry,
-                title=self._name,
-                data={
-                    CONF_NAME: self._name,
-                    CONF_TARGET_ENTITY: self._entity_ids,
-                },
-                options=out,
-            )
+            self.hass.config_entries.async_update_entry(self._entry, options=out)
             return self.async_create_entry(title="", data=out)
 
         return self.async_show_form(
