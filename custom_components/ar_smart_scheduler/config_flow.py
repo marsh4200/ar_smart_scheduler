@@ -49,6 +49,7 @@ from .const import (
 )
 
 CONF_DEVICE_TYPE = "device_type"
+SUPPORTED_ENTITY_DOMAINS = ["cover", "switch", "light"]
 
 COVER_ACTIONS = ["open", "close", "position"]
 COVER_ACTION_TO_SERVICE = {
@@ -89,6 +90,14 @@ def _detect_type(entity_ids) -> str:
     if any(e.startswith("light.") for e in ents):
         return "light"
     return "onoff"
+
+
+def _has_unsupported_entities(entity_ids: list[str]) -> bool:
+    for entity_id in entity_ids:
+        domain = entity_id.split(".", 1)[0]
+        if domain not in SUPPORTED_ENTITY_DOMAINS:
+            return True
+    return False
 
 
 def _cover_defaults_from_existing(existing: dict):
@@ -253,7 +262,7 @@ def _general_schema(data: dict, opts: dict) -> vol.Schema:
         {
             vol.Required(CONF_NAME, default=data.get(CONF_NAME, "Scheduler")): str,
             vol.Required(CONF_TARGET_ENTITY, default=_normalize_entity_ids(data.get(CONF_TARGET_ENTITY))): selector.EntitySelector(
-                selector.EntitySelectorConfig(multiple=True)
+                selector.EntitySelectorConfig(multiple=True, domain=SUPPORTED_ENTITY_DOMAINS)
             ),
             vol.Required(CONF_DEVICE_TYPE, default=opts.get(CONF_DEVICE_TYPE, "auto")): selector.SelectSelector(
                 selector.SelectSelectorConfig(options=DEVICE_TYPES)
@@ -429,6 +438,8 @@ class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, 
 
             if not entity_ids:
                 errors[CONF_TARGET_ENTITY] = "required"
+            elif _has_unsupported_entities(entity_ids):
+                errors[CONF_TARGET_ENTITY] = "unsupported_domain"
             elif self._is_duplicate(name, entity_ids):
                 errors["base"] = "already_configured"
             else:
@@ -541,6 +552,8 @@ class ARSmartSchedulerOptionsFlow(_BaseSchedulerFlow, config_entries.OptionsFlow
 
             if not entity_ids:
                 errors[CONF_TARGET_ENTITY] = "required"
+            elif _has_unsupported_entities(entity_ids):
+                errors[CONF_TARGET_ENTITY] = "unsupported_domain"
             elif self._is_duplicate(name, entity_ids, current_entry_id=entry.entry_id):
                 errors["base"] = "already_configured"
             else:
