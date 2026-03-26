@@ -16,27 +16,40 @@
       },
       "schedule": {
         "title": "Main Schedule",
-        "description": "Set when the first schedule window should start and end.",
+        "description": "Choose the trigger type for the main schedule window.",
         "data": {
-          "start_time": "Start time (used when trigger = time)",
           "start_trigger": "Start trigger",
-          "start_offset": "Start offset (minutes)",
-          "end_time": "End time (used when trigger = time)",
           "end_trigger": "End trigger",
-          "end_offset": "End offset (minutes)",
           "weekdays": "Weekdays"
+        }
+      },
+      "schedule_details": {
+        "title": "Main Schedule Details",
+        "description": "Set the time for time-based triggers, or the offset for sunrise/sunset triggers.",
+        "data": {
+          "start_time": "Start time",
+          "start_offset": "Start offset (minutes)",
+          "end_time": "End time",
+          "end_offset": "End offset (minutes)"
         }
       },
       "second_window": {
         "title": "Second Window",
-        "description": "Optional: add a second daily schedule window.",
+        "description": "Optional: enable a second window and choose its trigger type.",
         "data": {
           "second_enabled": "Enable second window",
-          "second_start_time": "Second start time (used when trigger = time)",
           "second_start_trigger": "Second start trigger",
+          "second_end_trigger": "Second end trigger"
+        }
+      },
+      "second_window_details": {
+        "title": "Second Window Details",
+        "description": "Set the time for time-based triggers, or the offset for sunrise/sunset triggers.",
+        "data": {
+          "second_enabled": "Enable second window",
+          "second_start_time": "Second start time",
           "second_start_offset": "Second start offset (minutes)",
-          "second_end_time": "Second end time (used when trigger = time)",
-          "second_end_trigger": "Second end trigger",
+          "second_end_time": "Second end time",
           "second_end_offset": "Second end offset (minutes)"
         }
       },
@@ -61,7 +74,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "Scheduler Settings"
+        "title": "Scheduler Settings",
+        "menu_options": {
+          "general": "General",
+          "schedule": "Main schedule",
+          "second_window": "Second window",
+          "actions": "Actions"
+        }
       },
       "general": {
         "title": "General",
@@ -75,27 +94,40 @@
       },
       "schedule": {
         "title": "Main Schedule",
-        "description": "Edit the main schedule window.",
+        "description": "Choose the trigger type for the main schedule window.",
         "data": {
-          "start_time": "Start time (used when trigger = time)",
           "start_trigger": "Start trigger",
-          "start_offset": "Start offset (minutes)",
-          "end_time": "End time (used when trigger = time)",
           "end_trigger": "End trigger",
-          "end_offset": "End offset (minutes)",
           "weekdays": "Weekdays"
+        }
+      },
+      "schedule_details": {
+        "title": "Main Schedule Details",
+        "description": "Set the time for time-based triggers, or the offset for sunrise/sunset triggers.",
+        "data": {
+          "start_time": "Start time",
+          "start_offset": "Start offset (minutes)",
+          "end_time": "End time",
+          "end_offset": "End offset (minutes)"
         }
       },
       "second_window": {
         "title": "Second Window",
-        "description": "Enable or edit the optional second schedule window.",
+        "description": "Enable a second window and choose its trigger type.",
         "data": {
           "second_enabled": "Enable second window",
-          "second_start_time": "Second start time (used when trigger = time)",
           "second_start_trigger": "Second start trigger",
+          "second_end_trigger": "Second end trigger"
+        }
+      },
+      "second_window_details": {
+        "title": "Second Window Details",
+        "description": "Set the time for time-based triggers, or the offset for sunrise/sunset triggers.",
+        "data": {
+          "second_enabled": "Enable second window",
+          "second_start_time": "Second start time",
           "second_start_offset": "Second start offset (minutes)",
-          "second_end_time": "Second end time (used when trigger = time)",
-          "second_end_trigger": "Second end trigger",
+          "second_end_time": "Second end time",
           "second_end_offset": "Second end offset (minutes)"
         }
       },
@@ -115,12 +147,6 @@
           "onoff_end_action": "End action"
         }
       }
-    },
-    "menu_options": {
-      "general": "General",
-      "schedule": "Main schedule",
-      "second_window": "Second window",
-      "actions": "Actions"
     }
   }
 }
