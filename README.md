@@ -2,6 +2,9 @@
 ## 🙌 Credits  
 **Developed by A R Smart Home Automation**
 
+[![GitHub release](https://img.shields.io/github/v/release/marsh4200/ar_smart_scheduler.svg)](https://github.com/marsh4200/ar_smart_scheduler/releases)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/marsh4200/ar_smart_scheduler)
+
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](
   https://my.home-assistant.io/redirect/hacs_repository/?owner=marsh4200&repository=ar_smart_scheduler&category=integration
