@@ -86,4 +86,16 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         _LOGGER.info("AR Smart Scheduler entry migrated to version 2")
 
+    if entry.version == 2:
+        options = dict(entry.options)
+        options.setdefault("device_type", "auto")
+
+        hass.config_entries.async_update_entry(
+            entry,
+            options=options,
+            version=3,
+        )
+
+        _LOGGER.info("AR Smart Scheduler entry migrated to version 3")
+
     return True

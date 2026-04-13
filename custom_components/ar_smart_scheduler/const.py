@@ -1,10 +1,11 @@
 DOMAIN = "ar_smart_scheduler"
+SUN_ENTITY_ID = "sun.sun"
 
 # Required by __init__.py
 PLATFORMS = ["switch", "time", "sensor"]
 
 # Supported device types (action profiles)
-DEVICE_TYPES = ["auto", "cover", "onoff", "light"]
+DEVICE_TYPES = ["auto", "cover", "onoff", "light", "climate"]
 
 # Trigger types (schedule profiles)
 TRIGGER_TYPES = ["time", "sunrise", "sunset"]
@@ -117,6 +118,27 @@ DEFAULT_LIGHT_END_ACTION = "off"
 
 DEFAULT_LIGHT_START_BRIGHTNESS = 50
 DEFAULT_LIGHT_END_BRIGHTNESS = 10
+
+# -------------------------------------------------
+# CLIMATE COMPATIBILITY
+# -------------------------------------------------
+#
+# Older copies of config_flow.py imported these names. Keeping them here
+# prevents mixed-file installs from crashing Home Assistant during startup.
+
+CLIMATE_ACTIONS = ["heat", "cool", "off", "temperature"]
+
+CLIMATE_ACTION_TO_SERVICE = {
+    "heat": "set_hvac_mode",
+    "cool": "set_hvac_mode",
+    "off": "set_hvac_mode",
+    "temperature": "set_temperature",
+}
+
+DEFAULT_CLIMATE_START_ACTION = "heat"
+DEFAULT_CLIMATE_END_ACTION = "off"
+DEFAULT_CLIMATE_START_TEMPERATURE = 21
+DEFAULT_CLIMATE_END_TEMPERATURE = 18
 
 # -------------------------------------------------
 # Dispatcher signals

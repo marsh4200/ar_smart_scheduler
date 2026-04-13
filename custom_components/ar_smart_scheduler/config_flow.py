@@ -5,6 +5,8 @@ from homeassistant import config_entries
 from homeassistant.helpers import selector
 
 from .const import (
+    CLIMATE_ACTIONS,
+    CLIMATE_ACTION_TO_SERVICE,
     CONF_ENABLED,
     CONF_END,
     CONF_END_DATA,
@@ -26,6 +28,10 @@ from .const import (
     CONF_START_TRIGGER,
     CONF_TARGET_ENTITY,
     CONF_WEEKDAYS,
+    DEFAULT_CLIMATE_END_ACTION,
+    DEFAULT_CLIMATE_END_TEMPERATURE,
+    DEFAULT_CLIMATE_START_ACTION,
+    DEFAULT_CLIMATE_START_TEMPERATURE,
     DEFAULT_COVER_END_ACTION,
     DEFAULT_COVER_START_ACTION,
     DEFAULT_END,
@@ -49,7 +55,7 @@ from .const import (
 )
 
 CONF_DEVICE_TYPE = "device_type"
-SUPPORTED_ENTITY_DOMAINS = ["cover", "switch", "light"]
+SUPPORTED_ENTITY_DOMAINS = ["cover", "switch", "light", "climate", "media_player"]
 
 COVER_ACTIONS = ["open", "close", "position"]
 COVER_ACTION_TO_SERVICE = {
@@ -85,6 +91,8 @@ def _normalize_entity_ids(entity_ids) -> list[str]:
 def _detect_type(entity_ids) -> str:
     ents = _normalize_entity_ids(entity_ids)
 
+    if any(e.startswith("climate.") for e in ents):
+        return "climate"
     if any(e.startswith("cover.") for e in ents):
         return "cover"
     if any(e.startswith("light.") for e in ents):
@@ -158,6 +166,34 @@ def _light_defaults_from_existing(existing: dict):
     return start_action, start_bri, end_action, end_bri
 
 
+def _climate_defaults_from_existing(existing: dict):
+    ss = str(existing.get(CONF_START_SERVICE, "") or "")
+    es = str(existing.get(CONF_END_SERVICE, "") or "")
+    sd = existing.get(CONF_START_DATA) or {}
+    ed = existing.get(CONF_END_DATA) or {}
+
+    start_action = str(sd.get("hvac_mode", DEFAULT_CLIMATE_START_ACTION))
+    if ss == "set_temperature":
+        start_action = "temperature"
+    elif ss == "set_hvac_mode":
+        start_action = str(sd.get("hvac_mode", DEFAULT_CLIMATE_START_ACTION))
+    start_temp = int(sd.get("temperature", DEFAULT_CLIMATE_START_TEMPERATURE))
+
+    end_action = str(ed.get("hvac_mode", DEFAULT_CLIMATE_END_ACTION))
+    if es == "set_temperature":
+        end_action = "temperature"
+    elif es == "set_hvac_mode":
+        end_action = str(ed.get("hvac_mode", DEFAULT_CLIMATE_END_ACTION))
+    end_temp = int(ed.get("temperature", DEFAULT_CLIMATE_END_TEMPERATURE))
+
+    if start_action not in CLIMATE_ACTIONS:
+        start_action = DEFAULT_CLIMATE_START_ACTION
+    if end_action not in CLIMATE_ACTIONS:
+        end_action = DEFAULT_CLIMATE_END_ACTION
+
+    return start_action, start_temp, end_action, end_temp
+
+
 def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.Schema:
     existing = existing or {}
 
@@ -199,6 +235,25 @@ def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.
             }
         )
 
+    if device_type == "climate":
+        start_action, start_temp, end_action, end_temp = _climate_defaults_from_existing(existing)
+        return vol.Schema(
+            {
+                vol.Required("climate_start_action", default=start_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=CLIMATE_ACTIONS)
+                ),
+                vol.Required("climate_start_temperature", default=start_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=16, max=30, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
+                vol.Required("climate_end_action", default=end_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=CLIMATE_ACTIONS)
+                ),
+                vol.Required("climate_end_temperature", default=end_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=16, max=30, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
+            }
+        )
+
     return vol.Schema(
         {
             vol.Required("onoff_start_action", default="on"): selector.SelectSelector(
@@ -236,6 +291,18 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
         out[CONF_END_SERVICE] = "turn_on" if end_action in ("on", "brightness") else "turn_off"
         out[CONF_START_DATA] = {"brightness_pct": start_bri} if start_action == "brightness" else {}
         out[CONF_END_DATA] = {"brightness_pct": end_bri} if end_action == "brightness" else {}
+        return out
+
+    if device_type == "climate":
+        start_action = user_input.get("climate_start_action", DEFAULT_CLIMATE_START_ACTION)
+        end_action = user_input.get("climate_end_action", DEFAULT_CLIMATE_END_ACTION)
+        start_temp = int(user_input.get("climate_start_temperature", DEFAULT_CLIMATE_START_TEMPERATURE))
+        end_temp = int(user_input.get("climate_end_temperature", DEFAULT_CLIMATE_END_TEMPERATURE))
+
+        out[CONF_START_SERVICE] = CLIMATE_ACTION_TO_SERVICE[start_action]
+        out[CONF_END_SERVICE] = CLIMATE_ACTION_TO_SERVICE[end_action]
+        out[CONF_START_DATA] = {"temperature": start_temp} if start_action == "temperature" else {"hvac_mode": start_action}
+        out[CONF_END_DATA] = {"temperature": end_temp} if end_action == "temperature" else {"hvac_mode": end_action}
         return out
 
     start_action = user_input.get("onoff_start_action", "on")

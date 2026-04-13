@@ -9,8 +9,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
-    async_track_sunrise,
-    async_track_sunset,
+    async_track_point_in_utc_time,
+    async_track_state_change_event,
     async_track_time_change,
 )
 from homeassistant.util import dt as dt_util
@@ -59,9 +59,11 @@ from .const import (
     SIGNAL_START2_UPDATED,
     SIGNAL_START_UPDATED,
     SIGNAL_UPDATED,
+    SUN_ENTITY_ID,
     TRIGGER_SUNRISE,
     TRIGGER_SUNSET,
     TRIGGER_TYPES,
+    WEEKDAY_KEYS,
     WEEKDAY_MAP,
 )
 
@@ -131,6 +133,26 @@ class ARScheduler:
         self._unsub_end: Optional[callable] = None
         self._unsub_start2: Optional[callable] = None
         self._unsub_end2: Optional[callable] = None
+        self._unsub_sun_state: Optional[callable] = None
+
+        self._next_fire: dict[str, Optional[dt.datetime]] = {
+            "start": None,
+            "end": None,
+            "start2": None,
+            "end2": None,
+        }
+        self._last_run: dict[str, Optional[dt.datetime]] = {
+            "start": None,
+            "end": None,
+            "start2": None,
+            "end2": None,
+        }
+        self._solar_messages: dict[str, Optional[str]] = {
+            "start": None,
+            "end": None,
+            "start2": None,
+            "end2": None,
+        }
 
         self.state = State(
             enabled=True,
@@ -160,14 +182,17 @@ class ARScheduler:
     def targets(self) -> list[str]:
         return _normalize_targets(self.entry.data.get(CONF_TARGET_ENTITY))
 
+    @property
+    def sun_available(self) -> bool:
+        return self.hass.states.get(SUN_ENTITY_ID) is not None
+
     def build_state_snapshot(self) -> dict[str, Any]:
-        """Return a coordinator-friendly snapshot of the current scheduler state."""
         return {
             "entry_id": self.entry.entry_id,
             "name": self.entry.data.get("name", self.entry.title),
             "enabled": self.state.enabled,
             "targets": list(self.targets),
-            "weekdays": sorted(self.state.weekdays),
+            "weekdays": [WEEKDAY_KEYS[index] for index in sorted(self.state.weekdays)],
             "start_time": self.state.start.strftime("%H:%M:%S"),
             "end_time": self.state.end.strftime("%H:%M:%S"),
             "start_trigger": self.state.start_trigger,
@@ -185,6 +210,11 @@ class ARScheduler:
             "end_service": self.state.end_service,
             "start_data": dict(self.state.start_data),
             "end_data": dict(self.state.end_data),
+            "sun_entity_id": SUN_ENTITY_ID,
+            "sun_available": self.sun_available,
+            "next_fire": {key: self._format_datetime(value) for key, value in self._next_fire.items()},
+            "last_run": {key: self._format_datetime(value) for key, value in self._last_run.items()},
+            "solar_messages": dict(self._solar_messages),
         }
 
     def _load(self) -> None:
@@ -247,17 +277,28 @@ class ARScheduler:
         self._dispatch_updates()
 
     def _remove_tracks(self) -> None:
-        for attr in ("_unsub_start", "_unsub_end", "_unsub_start2", "_unsub_end2"):
+        for attr in ("_unsub_start", "_unsub_end", "_unsub_start2", "_unsub_end2", "_unsub_sun_state"):
             unsub = getattr(self, attr)
             if unsub:
                 unsub()
                 setattr(self, attr, None)
+
+        for key in self._next_fire:
+            self._next_fire[key] = None
+            self._solar_messages[key] = None
 
     def _setup_tracks(self) -> None:
         self._remove_tracks()
 
         if not self.state.enabled:
             return
+
+        if self._uses_solar_triggers():
+            self._unsub_sun_state = async_track_state_change_event(
+                self.hass,
+                SUN_ENTITY_ID,
+                self._handle_sun_state_change,
+            )
 
         self._setup_single_track(
             "start",
@@ -292,16 +333,12 @@ class ARScheduler:
 
     def _setup_single_track(self, which, trigger, when, offset_minutes, handler):
         unsub_attr = f"_unsub_{which}"
-        offset = dt.timedelta(minutes=offset_minutes)
-
-        if trigger == TRIGGER_SUNRISE:
-            setattr(self, unsub_attr, async_track_sunrise(self.hass, handler, offset=offset))
+        if trigger in (TRIGGER_SUNRISE, TRIGGER_SUNSET):
+            self._schedule_next_solar_track(which, trigger, offset_minutes, handler)
             return
 
-        if trigger == TRIGGER_SUNSET:
-            setattr(self, unsub_attr, async_track_sunset(self.hass, handler, offset=offset))
-            return
-
+        self._next_fire[which] = None
+        self._solar_messages[which] = None
         setattr(
             self,
             unsub_attr,
@@ -323,6 +360,96 @@ class ARScheduler:
             SIGNAL_END2_UPDATED,
         ):
             async_dispatcher_send(self.hass, f"{signal}_{self.entry.entry_id}")
+
+    def _uses_solar_triggers(self) -> bool:
+        triggers = [self.state.start_trigger, self.state.end_trigger]
+        if self.state.second_enabled:
+            triggers.extend([self.state.second_start_trigger, self.state.second_end_trigger])
+        return any(trigger in (TRIGGER_SUNRISE, TRIGGER_SUNSET) for trigger in triggers)
+
+    def _format_datetime(self, value: Optional[dt.datetime]) -> Optional[str]:
+        if value is None:
+            return None
+        return dt_util.as_local(value).isoformat()
+
+    def _resolve_next_solar_event(self, trigger: str, offset_minutes: int) -> tuple[Optional[dt.datetime], Optional[str]]:
+        sun_state = self.hass.states.get(SUN_ENTITY_ID)
+        if sun_state is None:
+            return None, f"{SUN_ENTITY_ID} is unavailable"
+
+        attr = "next_rising" if trigger == TRIGGER_SUNRISE else "next_setting"
+        raw = sun_state.attributes.get(attr)
+        if raw is None:
+            return None, f"{SUN_ENTITY_ID} has no {attr} attribute"
+
+        event_time = raw if isinstance(raw, dt.datetime) else dt_util.parse_datetime(str(raw))
+        if event_time is None:
+            return None, f"Could not parse {attr} from {SUN_ENTITY_ID}"
+
+        event_time = dt_util.as_utc(event_time)
+        scheduled = event_time + dt.timedelta(minutes=offset_minutes)
+        if scheduled <= dt_util.utcnow():
+            scheduled += dt.timedelta(days=1)
+
+        return scheduled, None
+
+    def _schedule_next_solar_track(self, which, trigger, offset_minutes, handler) -> None:
+        unsub_attr = f"_unsub_{which}"
+        existing = getattr(self, unsub_attr)
+        if existing:
+            existing()
+            setattr(self, unsub_attr, None)
+
+        scheduled, message = self._resolve_next_solar_event(trigger, offset_minutes)
+        self._next_fire[which] = scheduled
+        self._solar_messages[which] = message
+
+        if scheduled is None:
+            self.logger.warning("Unable to schedule %s trigger for %s: %s", trigger, which, message)
+            return
+
+        @callback
+        async def _run(now: dt.datetime) -> None:
+            self._last_run[which] = now
+            await handler(now)
+            self._schedule_next_solar_track(which, trigger, offset_minutes, handler)
+            self._dispatch_updates()
+
+        setattr(
+            self,
+            unsub_attr,
+            async_track_point_in_utc_time(self.hass, _run, scheduled),
+        )
+
+    @callback
+    def _handle_sun_state_change(self, event) -> None:
+        if not self.state.enabled:
+            return
+
+        solar_tracks = [
+            ("start", self.state.start_trigger, self.state.start_offset, self._handle_start),
+            ("end", self.state.end_trigger, self.state.end_offset, self._handle_end),
+        ]
+        if self.state.second_enabled:
+            solar_tracks.extend(
+                [
+                    ("start2", self.state.second_start_trigger, self.state.second_start_offset, self._handle_start2),
+                    ("end2", self.state.second_end_trigger, self.state.second_end_offset, self._handle_end2),
+                ]
+            )
+
+        changed = False
+        for which, trigger, offset_minutes, handler in solar_tracks:
+            if trigger not in (TRIGGER_SUNRISE, TRIGGER_SUNSET):
+                continue
+            previous = self._next_fire.get(which)
+            previous_message = self._solar_messages.get(which)
+            self._schedule_next_solar_track(which, trigger, offset_minutes, handler)
+            if self._next_fire.get(which) != previous or self._solar_messages.get(which) != previous_message:
+                changed = True
+
+        if changed:
+            self._dispatch_updates()
 
     def _today_allowed(self) -> bool:
         if not self.state.weekdays:
