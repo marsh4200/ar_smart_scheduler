@@ -14,13 +14,25 @@
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-blue.svg)](https://hacs.xyz)
 
-A Home Assistant custom integration that lets you schedule any entity with:
-- Start & End times  
-- Selectable weekdays  
-- Enable / Disable toggle  
+A powerful Home Assistant custom integration that lets you schedule any entity with:
 
-Perfect for lights, pumps, gates, garage doors, and more — built with installers in mind so customers can adjust schedules from the dashboard without admin access.
+- ⏰ Start & End times (time-based scheduling)
+- 🌅 Sunrise & Sunset triggers with adjustable offsets
+- 🔁 Dual daily schedules (run twice per day — e.g. morning & evening)
+- 📅 Selectable weekdays  
+- 🔘 Enable / Disable toggle  
 
+Built for real-world automation:
+
+- 🧠 Intelligent trigger system (time OR solar-based)
+- ⏱️ Offset control (run before/after sunrise or sunset)
+- 🧩 Works with any domain (lights, switches, covers, climate, media players, etc.)
+- 🎛️ Device-aware actions (brightness, temperature, position control)
+- ⚙️ Auto-detects device type for easy setup
+
+Perfect for lights, pumps, gates, garage doors, irrigation, and more — built with installers in mind so customers can safely adjust schedules from the dashboard without needing admin access.
+
+⚡ Simple for clients.
 ---
 
 ## ✨ Features
