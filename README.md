@@ -14,7 +14,7 @@
 
 [![HACS](https://img.shields.io/badge/HACS-Custom-blue.svg)](https://hacs.xyz)
 
-A powerful Home Assistant custom integration that lets you schedule any entity with:
+A Home Assistant custom integration that lets you schedule any entity with:
 
 - ⏰ Start & End times (time-based scheduling)
 - 🌅 Sunrise & Sunset triggers with adjustable offsets
