@@ -4,7 +4,7 @@
       "already_configured": "A scheduler with the same name and entities already exists."
     },
     "error": {
-      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, and gate-style covers."
+      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, climate devices, and media players."
     },
     "step": {
       "user": {
@@ -68,6 +68,10 @@
           "light_start_brightness": "Start brightness",
           "light_end_action": "End action",
           "light_end_brightness": "End brightness",
+          "climate_start_action": "Start action",
+          "climate_start_temperature": "Start temperature",
+          "climate_end_action": "End action",
+          "climate_end_temperature": "End temperature",
           "onoff_start_action": "Start action",
           "onoff_end_action": "End action"
         }
@@ -76,7 +80,7 @@
   },
   "options": {
     "error": {
-      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, and gate-style covers."
+      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, climate devices, and media players."
     },
     "step": {
       "init": {
@@ -149,6 +153,10 @@
           "light_start_brightness": "Start brightness",
           "light_end_action": "End action",
           "light_end_brightness": "End brightness",
+          "climate_start_action": "Start action",
+          "climate_start_temperature": "Start temperature",
+          "climate_end_action": "End action",
+          "climate_end_temperature": "End temperature",
           "onoff_start_action": "Start action",
           "onoff_end_action": "End action"
         }
