@@ -25,13 +25,29 @@ Perfect for lights, pumps, gates, garage doors, and more — built with installe
 
 ## ✨ Features
 
-- ⏰ Start & End time control (time entities)
+- ⏰ Start & End time control (time-based scheduling)
+- 🌅 Sunrise & Sunset triggers with adjustable offsets (± minutes)
+- 🔁 Dual schedule windows (run twice per day — morning & evening)
 - 📅 Selectable weekdays (Mon–Sun switches)
-- 🔘 Enable / Disable schedule
-- 🧩 Works with any domain (light, switch, cover, etc.)
-- 🛠️ Built for installers & client handover
-- 🧠 Real-time updates (no refresh needed)
-- 🖥️ Lovelace-friendly controls
+- 🔘 Enable / Disable schedule per automation
+
+- ⏱️ Smart offsets for solar events (before/after sunrise/sunset)
+- 🧠 Intelligent trigger system (time OR solar-based scheduling)
+- 🔁 Automatic re-scheduling when sun times update
+
+- 🧩 Works with any domain (light, switch, cover, climate, media_player, etc.)
+- 🎛️ Device-aware actions (brightness, temperature, position, etc.)
+- ⚙️ Auto device type detection (no manual setup needed)
+
+- 📊 Live status feedback:
+  - Next run time
+  - Last run time
+  - Active schedule window
+
+
+- 🖥️ Fully Lovelace-friendly controls
+- 🛠️ Built for installers & client handover (simple but powerful UI)
+- ⚡ Real-time updates (no reloads required)
 
 ---
 
