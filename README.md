@@ -104,35 +104,45 @@ Once installed:
 
 ---
 
-## 🖥️ Lovelace Example
-
-```yaml
+🖥️ Lovelace Example
+🔹 Option 1 — Default Entities Card
 type: entities
 title: 🎮 Gaming Room Lights
 entities:
-- entity: switch.gaming_lights_schedule_enabled
- name: Enable Schedule
-- entity: time.gaming_lights_start_time
- name: Start Time
-- entity: time.gaming_lights_end_time
- name: End Time
-- type: section
- label: Days
-- entity: switch.gaming_lights_mon
-- entity: switch.gaming_lights_tue
-- entity: switch.gaming_lights_wed
-- entity: switch.gaming_lights_thu
-- entity: switch.gaming_lights_fri
-- entity: switch.gaming_lights_sat
-- entity: switch.gaming_lights_sun
+  - entity: switch.gaming_lights_schedule_enabled
+    name: Enable Schedule
+  - entity: time.gaming_lights_start_time
+    name: Start Time
+  - entity: time.gaming_lights_end_time
+    name: End Time
+  - type: section
+    label: Days
+  - entity: switch.gaming_lights_mon
+  - entity: switch.gaming_lights_tue
+  - entity: switch.gaming_lights_wed
+  - entity: switch.gaming_lights_thu
+  - entity: switch.gaming_lights_fri
+  - entity: switch.gaming_lights_sat
+  - entity: switch.gaming_lights_sun
 state_color: true
-🧠 Notes
-Schedules respect selected weekdays
-
-Changes take effect immediately
-
-No Home Assistant admin access required for end users
 
 ---
+
+🚀 Option 2 — AR Scheduler Card (Recommended)
+
+For a cleaner and more user-friendly interface, use the custom card:
+
+👉 AR Scheduler Card
+🔗 https://github.com/marsh4200/ar-scheduler-card
+
+type: custom:ar-scheduler-card
+entity: switch.gaming_lights_schedule_enabled
+name: 🎮 Gaming Room Lights
+
+🧠 Notes
+📅 Schedules respect selected weekdays
+⚡ Changes take effect immediately
+👤 No Home Assistant admin access required for end users
+🎛️ Custom card provides a cleaner UI for client handover
 
 
