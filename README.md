@@ -1,111 +1,88 @@
 # AR Smart Scheduler
+
 ## 🙌 Credits  
 **Developed by A R Smart Home Automation**
 
-[![GitHub release](https://img.shields.io/github/v/release/marsh4200/ar_smart_scheduler.svg)](https://github.com/marsh4200/ar_smart_scheduler/releases)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/marsh4200/ar_smart_scheduler)
-
-
+[![GitHub release](https://img.shields.io/github/v/release/marsh4200/ar_smart_scheduler.svg)](https://github.com/marsh4200/ar_smart_scheduler/releases)  
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/marsh4200/ar_smart_scheduler)  
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](
-  https://my.home-assistant.io/redirect/hacs_repository/?owner=marsh4200&repository=ar_smart_scheduler&category=integration
+https://my.home-assistant.io/redirect/hacs_repository/?owner=marsh4200&repository=ar_smart_scheduler&category=integration
 )
 
+---
 
-
-[![HACS](https://img.shields.io/badge/HACS-Custom-blue.svg)](https://hacs.xyz)
+## 🚀 Overview
 
 A Home Assistant custom integration that lets you schedule any entity with:
 
-- ⏰ Start & End times (time-based scheduling)
-- 🌅 Sunrise & Sunset triggers with adjustable offsets
-- 🔁 Dual daily schedules (run twice per day — e.g. morning & evening)
+- ⏰ Start & End times (time-based scheduling)  
+- 🌅 Sunrise & Sunset triggers with adjustable offsets  
+- 🔁 Dual daily schedules (run twice per day — morning & evening)  
 - 📅 Selectable weekdays  
 - 🔘 Enable / Disable toggle  
 
-Built for real-world automation:
+Perfect for lights, pumps, gates, garage doors, irrigation, and more.
 
-- 🧠 Intelligent trigger system (time OR solar-based)
-- ⏱️ Offset control (run before/after sunrise or sunset)
-- 🧩 Works with any domain (lights, switches, covers, climate, media players, etc.)
-- 🎛️ Device-aware actions (brightness, temperature, position control)
-- ⚙️ Auto-detects device type for easy setup
+⚡ Simple for clients. Powerful for installers.
 
-Perfect for lights, pumps, gates, garage doors, irrigation, and more — built with installers in mind so customers can safely adjust schedules from the dashboard without needing admin access.
-
-⚡ Simple for clients.
 ---
 
 ## ✨ Features
 
-- ⏰ Start & End time control (time-based scheduling)
-- 🌅 Sunrise & Sunset triggers with adjustable offsets (± minutes)
-- 🔁 Dual schedule windows (run twice per day — morning & evening)
-- 📅 Selectable weekdays (Mon–Sun switches)
-- 🔘 Enable / Disable schedule per automation
+- ⏰ Start & End time control  
+- 🌅 Sunrise & Sunset with offsets (± minutes)  
+- 🔁 Dual schedule windows  
+- 📅 Weekday selection  
+- 🔘 Enable / Disable per schedule  
 
-- ⏱️ Smart offsets for solar events (before/after sunrise/sunset)
-- 🧠 Intelligent trigger system (time OR solar-based scheduling)
-- 🔁 Automatic re-scheduling when sun times update
+- 🧠 Intelligent trigger system (time OR solar)  
+- ⏱️ Offset control (before/after sun events)  
+- 🔁 Auto re-scheduling with sun updates  
 
-- 🧩 Works with any domain (light, switch, cover, climate, media_player, etc.)
-- 🎛️ Device-aware actions (brightness, temperature, position, etc.)
-- ⚙️ Auto device type detection (no manual setup needed)
+- 🧩 Works with any domain  
+- 🎛️ Device-aware actions  
+- ⚙️ Auto device detection  
 
-- 📊 Live status feedback:
-  - Next run time
-  - Last run time
-  - Active schedule window
+- 📊 Live status:
+  - Next run  
+  - Last run  
+  - Active window  
 
-
-- 🖥️ Fully Lovelace-friendly controls
-- 🛠️ Built for installers & client handover (simple but powerful UI)
-- ⚡ Real-time updates (no reloads required)
+- 🖥️ Lovelace friendly  
+- 🛠️ Installer focused  
+- ⚡ Real-time updates  
 
 ---
 
-## 📦 Installation (HACS – Custom Repository)
+## 📦 Installation (HACS)
 
-> This integration is installed via HACS as a custom repository.
-
-1. Open **HACS**
-2. Go to **Integrations**
-3. Click the **three dots (⋮)** → **Custom repositories**
-4. Add:
-https://github.com/marsh4200/ar_smart_scheduler
-
-Category: **Integration**
-5. Search for **AR Smart Scheduler** and install it
-6. Restart Home Assistant
+1. Open HACS  
+2. Go to Integrations  
+3. Add Custom Repository  
+4. Paste:
+   https://github.com/marsh4200/ar_smart_scheduler  
+5. Category: Integration  
+6. Install & Restart  
 
 ---
 
 ## 🧰 Manual Installation
 
-1. Copy the folder:
+Copy:
 custom_components/ar_smart_scheduler
 
-into:
-/config/custom_components/ar_smart_scheduler
+To:
+config/custom_components/ar_smart_scheduler
 
-2. Restart Home Assistant
-3. Go to **Settings → Devices & Services → Add Integration**
-4. Search for **AR Smart Scheduler**
+Restart Home Assistant.
 
 ---
 
-## ⚙️ Configuration
+## 🖥️ Lovelace Example
 
-Once installed:
+### 🔹 Default Entities Card
 
-1. Add the integration from **Settings → Devices & Services**
-2. Select the **entity to control** (light, switch, cover, etc.)
-3. Give your schedule a name (e.g. *Gaming Lights*)
-4. Set default start/end times and weekdays
-
----
-
-🖥️ Lovelace Example
-🔹 Option 1 — Default Entities Card
+```yaml
 type: entities
 title: 🎮 Gaming Room Lights
 entities:
@@ -125,24 +102,32 @@ entities:
   - entity: switch.gaming_lights_sat
   - entity: switch.gaming_lights_sun
 state_color: true
+```
 
 ---
 
-🚀 Option 2 — AR Scheduler Card (Recommended)
+### 🚀 AR Scheduler Card (Recommended)
 
-For a cleaner and more user-friendly interface, use the custom card:
+Repo:
+https://github.com/marsh4200/ar-scheduler-card
 
-👉 AR Scheduler Card
-🔗 https://github.com/marsh4200/ar-scheduler-card
-
+```yaml
 type: custom:ar-scheduler-card
 entity: switch.gaming_lights_schedule_enabled
 name: 🎮 Gaming Room Lights
+```
 
-🧠 Notes
-📅 Schedules respect selected weekdays
-⚡ Changes take effect immediately
-👤 No Home Assistant admin access required for end users
-🎛️ Custom card provides a cleaner UI for client handover
+---
 
+## 🧠 Notes
 
+- 📅 Respects weekdays  
+- ⚡ Instant updates  
+- 👤 No admin access needed  
+- 🎛️ Clean UI for clients  
+
+---
+
+## 🔥 In short
+
+**AR Smart Scheduler makes scheduling simple, powerful, and client-friendly.**
