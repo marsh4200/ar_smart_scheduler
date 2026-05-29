@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+from datetime import time as dt_time
+
+from homeassistant.components.time import TimeEntity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import EntityCategory
+
+from .const import (
+    DOMAIN,
+    CONF_START,
+    CONF_END,
+    CONF_SECOND_START,
+    CONF_SECOND_END,
+    TRIGGER_TIME,
+    SIGNAL_START_UPDATED,
+    SIGNAL_END_UPDATED,
+    SIGNAL_START2_UPDATED,
+    SIGNAL_END2_UPDATED,
+)
+from .entity import scheduler_device_info
+
+
+async def async_setup_entry(hass, entry, async_add_entities):
+    scheduler = hass.data[DOMAIN][entry.entry_id]
+
+    async_add_entities([
+        SchedulerStartTime(entry, scheduler),
+        SchedulerEndTime(entry, scheduler),
+        SchedulerSecondStartTime(entry, scheduler),
+        SchedulerSecondEndTime(entry, scheduler),
+    ])
+
+
+class _BaseTime(TimeEntity):
+    should_poll = False
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, entry, scheduler):
+        self.entry = entry
+        self.scheduler = scheduler
+        self._unsub = None
+        self._attr_device_info = scheduler_device_info(entry)
+
+    async def async_will_remove_from_hass(self):
+        if self._unsub:
+            self._unsub()
+            self._unsub = None
+
+
+class SchedulerStartTime(_BaseTime):
+    def __init__(self, entry, scheduler):
+        super().__init__(entry, scheduler)
+        self._attr_name = "Start Time"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_start"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_START_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state,
+        )
+
+    @property
+    def available(self):
+        return self.scheduler.state.start_trigger == TRIGGER_TIME
+
+    @property
+    def native_value(self):
+        return self.scheduler.state.start
+
+    async def async_set_value(self, value: dt_time):
+        await self.scheduler.async_set_option(CONF_START, value.strftime("%H:%M:%S"))
+
+
+class SchedulerEndTime(_BaseTime):
+    def __init__(self, entry, scheduler):
+        super().__init__(entry, scheduler)
+        self._attr_name = "End Time"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_end"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_END_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state,
+        )
+
+    @property
+    def available(self):
+        return self.scheduler.state.end_trigger == TRIGGER_TIME
+
+    @property
+    def native_value(self):
+        return self.scheduler.state.end
+
+    async def async_set_value(self, value: dt_time):
+        await self.scheduler.async_set_option(CONF_END, value.strftime("%H:%M:%S"))
+
+
+class SchedulerSecondStartTime(_BaseTime):
+    def __init__(self, entry, scheduler):
+        super().__init__(entry, scheduler)
+        self._attr_name = "Second Start Time"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_start2"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_START2_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state,
+        )
+
+    @property
+    def available(self):
+        return self.scheduler.state.second_enabled and self.scheduler.state.second_start_trigger == TRIGGER_TIME
+
+    @property
+    def native_value(self):
+        return self.scheduler.state.second_start
+
+    async def async_set_value(self, value: dt_time):
+        await self.scheduler.async_set_option(CONF_SECOND_START, value.strftime("%H:%M:%S"))
+
+
+class SchedulerSecondEndTime(_BaseTime):
+    def __init__(self, entry, scheduler):
+        super().__init__(entry, scheduler)
+        self._attr_name = "Second End Time"
+        self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_end2"
+
+    async def async_added_to_hass(self):
+        self._unsub = async_dispatcher_connect(
+            self.hass,
+            f"{SIGNAL_END2_UPDATED}_{self.entry.entry_id}",
+            self.async_write_ha_state,
+        )
+
+    @property
+    def available(self):
+        return self.scheduler.state.second_enabled and self.scheduler.state.second_end_trigger == TRIGGER_TIME
+
+    @property
+    def native_value(self):
+        return self.scheduler.state.second_end
+
+    async def async_set_value(self, value: dt_time):
+        await self.scheduler.async_set_option(CONF_SECOND_END, value.strftime("%H:%M:%S"))
