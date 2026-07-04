@@ -5,10 +5,11 @@
     "@marsh4200"
   ],
   "config_flow": true,
+  "dependencies": ["http", "frontend", "websocket_api"],
   "documentation": "https://github.com/marsh4200/ar_smart_scheduler",
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/marsh4200/ar_smart_scheduler/issues",
   "requirements": [],
-  "version": "1.3.0"
+  "version": "1.4.0"
 }

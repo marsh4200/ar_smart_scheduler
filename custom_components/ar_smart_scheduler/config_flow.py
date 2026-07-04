@@ -7,13 +7,30 @@ from homeassistant.helpers import selector
 from .const import (
     CLIMATE_ACTIONS,
     CLIMATE_ACTION_TO_SERVICE,
+    CONF_CLIMATE_END_ACTION,
+    CONF_CLIMATE_END_TEMPERATURE,
+    CONF_CLIMATE_START_ACTION,
+    CONF_CLIMATE_START_TEMPERATURE,
+    CONF_COVER_END_ACTION,
+    CONF_COVER_END_POSITION,
+    CONF_COVER_START_ACTION,
+    CONF_COVER_START_POSITION,
+    CONF_DEVICE_TYPE,
     CONF_ENABLED,
     CONF_END,
     CONF_END_DATA,
     CONF_END_OFFSET,
     CONF_END_SERVICE,
     CONF_END_TRIGGER,
+    CONF_LIGHT_END_ACTION,
+    CONF_LIGHT_END_BRIGHTNESS,
+    CONF_LIGHT_START_ACTION,
+    CONF_LIGHT_START_BRIGHTNESS,
+    CONF_LOCK_END_ACTION,
+    CONF_LOCK_START_ACTION,
     CONF_NAME,
+    CONF_ONOFF_END_ACTION,
+    CONF_ONOFF_START_ACTION,
     CONF_SECOND_ENABLED,
     CONF_SECOND_END,
     CONF_SECOND_END_OFFSET,
@@ -27,16 +44,32 @@ from .const import (
     CONF_START_SERVICE,
     CONF_START_TRIGGER,
     CONF_TARGET_ENTITY,
+    CONF_WATER_HEATER_END_ACTION,
+    CONF_WATER_HEATER_END_TEMPERATURE,
+    CONF_WATER_HEATER_START_ACTION,
+    CONF_WATER_HEATER_START_TEMPERATURE,
     CONF_WEEKDAYS,
+    COVER_ACTIONS,
+    COVER_ACTION_TO_SERVICE,
     DEFAULT_CLIMATE_END_ACTION,
     DEFAULT_CLIMATE_END_TEMPERATURE,
     DEFAULT_CLIMATE_START_ACTION,
     DEFAULT_CLIMATE_START_TEMPERATURE,
     DEFAULT_COVER_END_ACTION,
+    DEFAULT_COVER_END_POSITION,
     DEFAULT_COVER_START_ACTION,
+    DEFAULT_COVER_START_POSITION,
     DEFAULT_END,
     DEFAULT_END_OFFSET,
     DEFAULT_END_TRIGGER,
+    DEFAULT_LIGHT_END_ACTION,
+    DEFAULT_LIGHT_END_BRIGHTNESS,
+    DEFAULT_LIGHT_START_ACTION,
+    DEFAULT_LIGHT_START_BRIGHTNESS,
+    DEFAULT_LOCK_END_ACTION,
+    DEFAULT_LOCK_START_ACTION,
+    DEFAULT_ONOFF_END_ACTION,
+    DEFAULT_ONOFF_START_ACTION,
     DEFAULT_SECOND_ENABLED,
     DEFAULT_SECOND_END,
     DEFAULT_SECOND_END_OFFSET,
@@ -47,27 +80,33 @@ from .const import (
     DEFAULT_START,
     DEFAULT_START_OFFSET,
     DEFAULT_START_TRIGGER,
+    DEFAULT_WATER_HEATER_END_ACTION,
+    DEFAULT_WATER_HEATER_END_TEMPERATURE,
+    DEFAULT_WATER_HEATER_START_ACTION,
+    DEFAULT_WATER_HEATER_START_TEMPERATURE,
     DEFAULT_WEEKDAYS,
     DEVICE_TYPES,
     DOMAIN,
+    LOCK_ACTIONS,
+    LOCK_ACTION_TO_SERVICE,
+    ONOFF_ACTIONS,
+    ONOFF_ACTION_TO_SERVICE,
     TRIGGER_TYPES,
+    WATER_HEATER_ACTIONS,
     WEEKDAY_KEYS,
 )
 
-CONF_DEVICE_TYPE = "device_type"
-SUPPORTED_ENTITY_DOMAINS = ["cover", "switch", "light", "climate", "media_player"]
-
-COVER_ACTIONS = ["open", "close", "position"]
-COVER_ACTION_TO_SERVICE = {
-    "open": "open_cover",
-    "close": "close_cover",
-    "position": "set_cover_position",
-}
-
-ONOFF_ACTIONS = ["on", "off"]
-ONOFF_ACTION_TO_SERVICE = {"on": "turn_on", "off": "turn_off"}
-
-LIGHT_ACTIONS = ["on", "off", "brightness"]
+SUPPORTED_ENTITY_DOMAINS = [
+    "cover",
+    "switch",
+    "light",
+    "climate",
+    "media_player",
+    "fan",
+    "water_heater",
+    "lock",
+    "input_boolean",
+]
 
 
 def _normalize_entity_ids(entity_ids) -> list[str]:
@@ -91,12 +130,15 @@ def _normalize_entity_ids(entity_ids) -> list[str]:
 def _detect_type(entity_ids) -> str:
     ents = _normalize_entity_ids(entity_ids)
 
-    if any(e.startswith("climate.") for e in ents):
-        return "climate"
-    if any(e.startswith("cover.") for e in ents):
-        return "cover"
-    if any(e.startswith("light.") for e in ents):
-        return "light"
+    for prefix, device_type in (
+        ("climate.", "climate"),
+        ("water_heater.", "water_heater"),
+        ("lock.", "lock"),
+        ("cover.", "cover"),
+        ("light.", "light"),
+    ):
+        if any(e.startswith(prefix) for e in ents):
+            return device_type
     return "onoff"
 
 
@@ -109,6 +151,20 @@ def _has_unsupported_entities(entity_ids: list[str]) -> bool:
 
 
 def _cover_defaults_from_existing(existing: dict):
+    start_action = existing.get(CONF_COVER_START_ACTION)
+    end_action = existing.get(CONF_COVER_END_ACTION)
+    start_pos = existing.get(CONF_COVER_START_POSITION)
+    end_pos = existing.get(CONF_COVER_END_POSITION)
+
+    if start_action in COVER_ACTIONS and end_action in COVER_ACTIONS:
+        return (
+            start_action,
+            int(start_pos if start_pos is not None else DEFAULT_COVER_START_POSITION),
+            end_action,
+            int(end_pos if end_pos is not None else DEFAULT_COVER_END_POSITION),
+        )
+
+    # Fall back to reverse-engineering from resolved services (pre-1.4 entries)
     ss = str(existing.get(CONF_START_SERVICE, "") or "")
     es = str(existing.get(CONF_END_SERVICE, "") or "")
     sd = existing.get(CONF_START_DATA) or {}
@@ -138,6 +194,17 @@ def _cover_defaults_from_existing(existing: dict):
 
 
 def _light_defaults_from_existing(existing: dict):
+    start_action = existing.get(CONF_LIGHT_START_ACTION)
+    end_action = existing.get(CONF_LIGHT_END_ACTION)
+
+    if start_action in ("on", "off", "brightness") and end_action in ("on", "off", "brightness"):
+        return (
+            start_action,
+            int(existing.get(CONF_LIGHT_START_BRIGHTNESS, DEFAULT_LIGHT_START_BRIGHTNESS)),
+            end_action,
+            int(existing.get(CONF_LIGHT_END_BRIGHTNESS, DEFAULT_LIGHT_END_BRIGHTNESS)),
+        )
+
     ss = str(existing.get(CONF_START_SERVICE, "") or "")
     es = str(existing.get(CONF_END_SERVICE, "") or "")
     sd = existing.get(CONF_START_DATA) or {}
@@ -167,6 +234,17 @@ def _light_defaults_from_existing(existing: dict):
 
 
 def _climate_defaults_from_existing(existing: dict):
+    start_action = existing.get(CONF_CLIMATE_START_ACTION)
+    end_action = existing.get(CONF_CLIMATE_END_ACTION)
+
+    if start_action in CLIMATE_ACTIONS and end_action in CLIMATE_ACTIONS:
+        return (
+            start_action,
+            int(existing.get(CONF_CLIMATE_START_TEMPERATURE, DEFAULT_CLIMATE_START_TEMPERATURE)),
+            end_action,
+            int(existing.get(CONF_CLIMATE_END_TEMPERATURE, DEFAULT_CLIMATE_END_TEMPERATURE)),
+        )
+
     ss = str(existing.get(CONF_START_SERVICE, "") or "")
     es = str(existing.get(CONF_END_SERVICE, "") or "")
     sd = existing.get(CONF_START_DATA) or {}
@@ -194,6 +272,28 @@ def _climate_defaults_from_existing(existing: dict):
     return start_action, start_temp, end_action, end_temp
 
 
+def _water_heater_defaults_from_existing(existing: dict):
+    start_action = existing.get(CONF_WATER_HEATER_START_ACTION, DEFAULT_WATER_HEATER_START_ACTION)
+    end_action = existing.get(CONF_WATER_HEATER_END_ACTION, DEFAULT_WATER_HEATER_END_ACTION)
+    if start_action not in WATER_HEATER_ACTIONS:
+        start_action = DEFAULT_WATER_HEATER_START_ACTION
+    if end_action not in WATER_HEATER_ACTIONS:
+        end_action = DEFAULT_WATER_HEATER_END_ACTION
+    start_temp = int(existing.get(CONF_WATER_HEATER_START_TEMPERATURE, DEFAULT_WATER_HEATER_START_TEMPERATURE))
+    end_temp = int(existing.get(CONF_WATER_HEATER_END_TEMPERATURE, DEFAULT_WATER_HEATER_END_TEMPERATURE))
+    return start_action, start_temp, end_action, end_temp
+
+
+def _lock_defaults_from_existing(existing: dict):
+    start_action = existing.get(CONF_LOCK_START_ACTION, DEFAULT_LOCK_START_ACTION)
+    end_action = existing.get(CONF_LOCK_END_ACTION, DEFAULT_LOCK_END_ACTION)
+    if start_action not in LOCK_ACTIONS:
+        start_action = DEFAULT_LOCK_START_ACTION
+    if end_action not in LOCK_ACTIONS:
+        end_action = DEFAULT_LOCK_END_ACTION
+    return start_action, end_action
+
+
 def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.Schema:
     existing = existing or {}
 
@@ -201,16 +301,16 @@ def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.
         start_action, start_pos, end_action, end_pos = _cover_defaults_from_existing(existing)
         return vol.Schema(
             {
-                vol.Required("cover_start_action", default=start_action): selector.SelectSelector(
+                vol.Required(CONF_COVER_START_ACTION, default=start_action): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=COVER_ACTIONS)
                 ),
-                vol.Required("cover_start_position", default=start_pos): selector.NumberSelector(
+                vol.Required(CONF_COVER_START_POSITION, default=start_pos): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER)
                 ),
-                vol.Required("cover_end_action", default=end_action): selector.SelectSelector(
+                vol.Required(CONF_COVER_END_ACTION, default=end_action): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=COVER_ACTIONS)
                 ),
-                vol.Required("cover_end_position", default=end_pos): selector.NumberSelector(
+                vol.Required(CONF_COVER_END_POSITION, default=end_pos): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER)
                 ),
             }
@@ -220,16 +320,16 @@ def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.
         start_action, start_bri, end_action, end_bri = _light_defaults_from_existing(existing)
         return vol.Schema(
             {
-                vol.Required("light_start_action", default=start_action): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=LIGHT_ACTIONS)
+                vol.Required(CONF_LIGHT_START_ACTION, default=start_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=["on", "off", "brightness"])
                 ),
-                vol.Required("light_start_brightness", default=start_bri): selector.NumberSelector(
+                vol.Required(CONF_LIGHT_START_BRIGHTNESS, default=start_bri): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER)
                 ),
-                vol.Required("light_end_action", default=end_action): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=LIGHT_ACTIONS)
+                vol.Required(CONF_LIGHT_END_ACTION, default=end_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=["on", "off", "brightness"])
                 ),
-                vol.Required("light_end_brightness", default=end_bri): selector.NumberSelector(
+                vol.Required(CONF_LIGHT_END_BRIGHTNESS, default=end_bri): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER)
                 ),
             }
@@ -239,42 +339,85 @@ def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.
         start_action, start_temp, end_action, end_temp = _climate_defaults_from_existing(existing)
         return vol.Schema(
             {
-                vol.Required("climate_start_action", default=start_action): selector.SelectSelector(
+                vol.Required(CONF_CLIMATE_START_ACTION, default=start_action): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=CLIMATE_ACTIONS)
                 ),
-                vol.Required("climate_start_temperature", default=start_temp): selector.NumberSelector(
-                    selector.NumberSelectorConfig(min=16, max=30, step=1, mode=selector.NumberSelectorMode.BOX)
+                vol.Required(CONF_CLIMATE_START_TEMPERATURE, default=start_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=8, max=35, step=1, mode=selector.NumberSelectorMode.BOX)
                 ),
-                vol.Required("climate_end_action", default=end_action): selector.SelectSelector(
+                vol.Required(CONF_CLIMATE_END_ACTION, default=end_action): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=CLIMATE_ACTIONS)
                 ),
-                vol.Required("climate_end_temperature", default=end_temp): selector.NumberSelector(
-                    selector.NumberSelectorConfig(min=16, max=30, step=1, mode=selector.NumberSelectorMode.BOX)
+                vol.Required(CONF_CLIMATE_END_TEMPERATURE, default=end_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=8, max=35, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
+            }
+        )
+
+    if device_type == "water_heater":
+        start_action, start_temp, end_action, end_temp = _water_heater_defaults_from_existing(existing)
+        return vol.Schema(
+            {
+                vol.Required(CONF_WATER_HEATER_START_ACTION, default=start_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=WATER_HEATER_ACTIONS)
+                ),
+                vol.Required(CONF_WATER_HEATER_START_TEMPERATURE, default=start_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=30, max=80, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
+                vol.Required(CONF_WATER_HEATER_END_ACTION, default=end_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=WATER_HEATER_ACTIONS)
+                ),
+                vol.Required(CONF_WATER_HEATER_END_TEMPERATURE, default=end_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=30, max=80, step=1, mode=selector.NumberSelectorMode.BOX)
+                ),
+            }
+        )
+
+    if device_type == "lock":
+        start_action, end_action = _lock_defaults_from_existing(existing)
+        return vol.Schema(
+            {
+                vol.Required(CONF_LOCK_START_ACTION, default=start_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=LOCK_ACTIONS)
+                ),
+                vol.Required(CONF_LOCK_END_ACTION, default=end_action): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=LOCK_ACTIONS)
                 ),
             }
         )
 
     return vol.Schema(
         {
-            vol.Required("onoff_start_action", default="on"): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=ONOFF_ACTIONS)
-            ),
-            vol.Required("onoff_end_action", default="off"): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=ONOFF_ACTIONS)
-            ),
+            vol.Required(
+                CONF_ONOFF_START_ACTION,
+                default=existing.get(CONF_ONOFF_START_ACTION, DEFAULT_ONOFF_START_ACTION),
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=ONOFF_ACTIONS)),
+            vol.Required(
+                CONF_ONOFF_END_ACTION,
+                default=existing.get(CONF_ONOFF_END_ACTION, DEFAULT_ONOFF_END_ACTION),
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=ONOFF_ACTIONS)),
         }
     )
 
 
 def _resolve_action_options(device_type: str, user_input: dict) -> dict:
+    """Translate user-friendly action choices into resolved services + data.
+
+    Also stores the raw action option keys so the select/number entities and
+    the options flow always reflect the current choice.
+    """
     out: dict = {}
 
     if device_type == "cover":
-        start_action = user_input.get("cover_start_action", DEFAULT_COVER_START_ACTION)
-        end_action = user_input.get("cover_end_action", DEFAULT_COVER_END_ACTION)
-        start_pos = int(user_input.get("cover_start_position", 50))
-        end_pos = int(user_input.get("cover_end_position", 0))
+        start_action = user_input.get(CONF_COVER_START_ACTION, DEFAULT_COVER_START_ACTION)
+        end_action = user_input.get(CONF_COVER_END_ACTION, DEFAULT_COVER_END_ACTION)
+        start_pos = int(user_input.get(CONF_COVER_START_POSITION, DEFAULT_COVER_START_POSITION))
+        end_pos = int(user_input.get(CONF_COVER_END_POSITION, DEFAULT_COVER_END_POSITION))
 
+        out[CONF_COVER_START_ACTION] = start_action
+        out[CONF_COVER_END_ACTION] = end_action
+        out[CONF_COVER_START_POSITION] = start_pos
+        out[CONF_COVER_END_POSITION] = end_pos
         out[CONF_START_SERVICE] = COVER_ACTION_TO_SERVICE[start_action]
         out[CONF_END_SERVICE] = COVER_ACTION_TO_SERVICE[end_action]
         out[CONF_START_DATA] = {"position": start_pos} if start_action == "position" else {}
@@ -282,11 +425,15 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
         return out
 
     if device_type == "light":
-        start_action = user_input.get("light_start_action", "brightness")
-        end_action = user_input.get("light_end_action", "off")
-        start_bri = int(user_input.get("light_start_brightness", 50))
-        end_bri = int(user_input.get("light_end_brightness", 10))
+        start_action = user_input.get(CONF_LIGHT_START_ACTION, DEFAULT_LIGHT_START_ACTION)
+        end_action = user_input.get(CONF_LIGHT_END_ACTION, DEFAULT_LIGHT_END_ACTION)
+        start_bri = int(user_input.get(CONF_LIGHT_START_BRIGHTNESS, DEFAULT_LIGHT_START_BRIGHTNESS))
+        end_bri = int(user_input.get(CONF_LIGHT_END_BRIGHTNESS, DEFAULT_LIGHT_END_BRIGHTNESS))
 
+        out[CONF_LIGHT_START_ACTION] = start_action
+        out[CONF_LIGHT_END_ACTION] = end_action
+        out[CONF_LIGHT_START_BRIGHTNESS] = start_bri
+        out[CONF_LIGHT_END_BRIGHTNESS] = end_bri
         out[CONF_START_SERVICE] = "turn_on" if start_action in ("on", "brightness") else "turn_off"
         out[CONF_END_SERVICE] = "turn_on" if end_action in ("on", "brightness") else "turn_off"
         out[CONF_START_DATA] = {"brightness_pct": start_bri} if start_action == "brightness" else {}
@@ -294,19 +441,53 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
         return out
 
     if device_type == "climate":
-        start_action = user_input.get("climate_start_action", DEFAULT_CLIMATE_START_ACTION)
-        end_action = user_input.get("climate_end_action", DEFAULT_CLIMATE_END_ACTION)
-        start_temp = int(user_input.get("climate_start_temperature", DEFAULT_CLIMATE_START_TEMPERATURE))
-        end_temp = int(user_input.get("climate_end_temperature", DEFAULT_CLIMATE_END_TEMPERATURE))
+        start_action = user_input.get(CONF_CLIMATE_START_ACTION, DEFAULT_CLIMATE_START_ACTION)
+        end_action = user_input.get(CONF_CLIMATE_END_ACTION, DEFAULT_CLIMATE_END_ACTION)
+        start_temp = int(user_input.get(CONF_CLIMATE_START_TEMPERATURE, DEFAULT_CLIMATE_START_TEMPERATURE))
+        end_temp = int(user_input.get(CONF_CLIMATE_END_TEMPERATURE, DEFAULT_CLIMATE_END_TEMPERATURE))
 
+        out[CONF_CLIMATE_START_ACTION] = start_action
+        out[CONF_CLIMATE_END_ACTION] = end_action
+        out[CONF_CLIMATE_START_TEMPERATURE] = start_temp
+        out[CONF_CLIMATE_END_TEMPERATURE] = end_temp
         out[CONF_START_SERVICE] = CLIMATE_ACTION_TO_SERVICE[start_action]
         out[CONF_END_SERVICE] = CLIMATE_ACTION_TO_SERVICE[end_action]
         out[CONF_START_DATA] = {"temperature": start_temp} if start_action == "temperature" else {"hvac_mode": start_action}
         out[CONF_END_DATA] = {"temperature": end_temp} if end_action == "temperature" else {"hvac_mode": end_action}
         return out
 
-    start_action = user_input.get("onoff_start_action", "on")
-    end_action = user_input.get("onoff_end_action", "off")
+    if device_type == "water_heater":
+        start_action = user_input.get(CONF_WATER_HEATER_START_ACTION, DEFAULT_WATER_HEATER_START_ACTION)
+        end_action = user_input.get(CONF_WATER_HEATER_END_ACTION, DEFAULT_WATER_HEATER_END_ACTION)
+        start_temp = int(user_input.get(CONF_WATER_HEATER_START_TEMPERATURE, DEFAULT_WATER_HEATER_START_TEMPERATURE))
+        end_temp = int(user_input.get(CONF_WATER_HEATER_END_TEMPERATURE, DEFAULT_WATER_HEATER_END_TEMPERATURE))
+
+        out[CONF_WATER_HEATER_START_ACTION] = start_action
+        out[CONF_WATER_HEATER_END_ACTION] = end_action
+        out[CONF_WATER_HEATER_START_TEMPERATURE] = start_temp
+        out[CONF_WATER_HEATER_END_TEMPERATURE] = end_temp
+        out[CONF_START_SERVICE] = "set_temperature" if start_action == "temperature" else "set_operation_mode"
+        out[CONF_END_SERVICE] = "set_temperature" if end_action == "temperature" else "set_operation_mode"
+        out[CONF_START_DATA] = {"temperature": start_temp} if start_action == "temperature" else {"operation_mode": start_action}
+        out[CONF_END_DATA] = {"temperature": end_temp} if end_action == "temperature" else {"operation_mode": end_action}
+        return out
+
+    if device_type == "lock":
+        start_action = user_input.get(CONF_LOCK_START_ACTION, DEFAULT_LOCK_START_ACTION)
+        end_action = user_input.get(CONF_LOCK_END_ACTION, DEFAULT_LOCK_END_ACTION)
+
+        out[CONF_LOCK_START_ACTION] = start_action
+        out[CONF_LOCK_END_ACTION] = end_action
+        out[CONF_START_SERVICE] = LOCK_ACTION_TO_SERVICE[start_action]
+        out[CONF_END_SERVICE] = LOCK_ACTION_TO_SERVICE[end_action]
+        out[CONF_START_DATA] = {}
+        out[CONF_END_DATA] = {}
+        return out
+
+    start_action = user_input.get(CONF_ONOFF_START_ACTION, DEFAULT_ONOFF_START_ACTION)
+    end_action = user_input.get(CONF_ONOFF_END_ACTION, DEFAULT_ONOFF_END_ACTION)
+    out[CONF_ONOFF_START_ACTION] = start_action
+    out[CONF_ONOFF_END_ACTION] = end_action
     out[CONF_START_SERVICE] = ONOFF_ACTION_TO_SERVICE[start_action]
     out[CONF_END_SERVICE] = ONOFF_ACTION_TO_SERVICE[end_action]
     out[CONF_START_DATA] = {}
@@ -455,8 +636,8 @@ class _BaseSchedulerFlow:
         return {
             CONF_START: _normalize_time_input(user_input.get(CONF_START, current.get(CONF_START, DEFAULT_START))),
             CONF_END: _normalize_time_input(user_input.get(CONF_END, current.get(CONF_END, DEFAULT_END))),
-            CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)),
-            CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)),
+            CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, current.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))),
+            CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, current.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))),
         }
 
     def _prepare_second_window(self, user_input: dict) -> dict:
@@ -472,8 +653,8 @@ class _BaseSchedulerFlow:
             CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
             CONF_SECOND_START: _normalize_time_input(user_input.get(CONF_SECOND_START, current.get(CONF_SECOND_START, DEFAULT_SECOND_START))),
             CONF_SECOND_END: _normalize_time_input(user_input.get(CONF_SECOND_END, current.get(CONF_SECOND_END, DEFAULT_SECOND_END))),
-            CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET)),
-            CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET)),
+            CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, current.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET))),
+            CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, current.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET))),
         }
 
     def _is_duplicate(self, name: str, entity_ids: list[str], current_entry_id: str | None = None) -> bool:
@@ -489,7 +670,12 @@ class _BaseSchedulerFlow:
 
 
 class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2
+    # IMPORTANT: must match the highest version produced by
+    # async_migrate_entry in __init__.py. With VERSION=2 and migrations
+    # bumping entries to 3, HA refused to load migrated entries
+    # ("migration error") because the entry version exceeded the flow
+    # version. This was the root cause of schedulers failing after restart.
+    VERSION = 3
 
     def __init__(self) -> None:
         self._name = None

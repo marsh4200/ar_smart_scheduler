@@ -4,7 +4,9 @@
       "already_configured": "A scheduler with the same name and entities already exists."
     },
     "error": {
-      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, climate devices, and media players."
+      "already_configured": "A scheduler with the same name and entities already exists.",
+      "required": "Select at least one entity to control.",
+      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, climate devices, media players, fans, water heaters, locks, and input booleans."
     },
     "step": {
       "user": {
@@ -72,6 +74,12 @@
           "climate_start_temperature": "Start temperature",
           "climate_end_action": "End action",
           "climate_end_temperature": "End temperature",
+          "water_heater_start_action": "Start action",
+          "water_heater_start_temperature": "Start temperature",
+          "water_heater_end_action": "End action",
+          "water_heater_end_temperature": "End temperature",
+          "lock_start_action": "Start action",
+          "lock_end_action": "End action",
           "onoff_start_action": "Start action",
           "onoff_end_action": "End action"
         }
@@ -80,7 +88,9 @@
   },
   "options": {
     "error": {
-      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, climate devices, and media players."
+      "already_configured": "A scheduler with the same name and entities already exists.",
+      "required": "Select at least one entity to control.",
+      "unsupported_domain": "Only controllable entities are allowed: covers, switches, lights, climate devices, media players, fans, water heaters, locks, and input booleans."
     },
     "step": {
       "init": {
@@ -157,6 +167,12 @@
           "climate_start_temperature": "Start temperature",
           "climate_end_action": "End action",
           "climate_end_temperature": "End temperature",
+          "water_heater_start_action": "Start action",
+          "water_heater_start_temperature": "Start temperature",
+          "water_heater_end_action": "End action",
+          "water_heater_end_temperature": "End temperature",
+          "lock_start_action": "Start action",
+          "lock_end_action": "End action",
           "onoff_start_action": "Start action",
           "onoff_end_action": "End action"
         }

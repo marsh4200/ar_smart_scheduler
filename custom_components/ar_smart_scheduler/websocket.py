@@ -35,19 +35,34 @@ from .const import (
     DEFAULT_END_DATA,
     DEFAULT_START_SERVICE,
     DEFAULT_START_DATA,
+    TRIGGER_TYPES,
     WEEKDAY_KEYS,
 )
 
+
 @callback
 def async_register_ws(hass: HomeAssistant) -> None:
+    @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list"})
+    @callback
+    def ws_list(hass: HomeAssistant, connection, msg) -> None:
+        """Return live snapshots of every scheduler (used by the Lovelace card)."""
+        schedulers = hass.data.get(DOMAIN, {})
+        items = []
+        for value in schedulers.values():
+            build = getattr(value, "build_state_snapshot", None)
+            if callable(build):
+                items.append(build())
+        connection.send_result(msg["id"], {"schedulers": items})
+
+    @websocket_api.require_admin
     @websocket_api.websocket_command(
         {
             vol.Required("type"): f"{DOMAIN}/set_options",
             vol.Required("entry_id"): str,
             vol.Optional(CONF_START): str,
             vol.Optional(CONF_END): str,
-            vol.Optional(CONF_START_TRIGGER): str,
-            vol.Optional(CONF_END_TRIGGER): str,
+            vol.Optional(CONF_START_TRIGGER): vol.In(TRIGGER_TYPES),
+            vol.Optional(CONF_END_TRIGGER): vol.In(TRIGGER_TYPES),
             vol.Optional(CONF_START_OFFSET): int,
             vol.Optional(CONF_END_OFFSET): int,
             vol.Optional(CONF_WEEKDAYS): [vol.In(WEEKDAY_KEYS)],
@@ -55,8 +70,8 @@ def async_register_ws(hass: HomeAssistant) -> None:
             vol.Optional(CONF_SECOND_ENABLED): bool,
             vol.Optional(CONF_SECOND_START): str,
             vol.Optional(CONF_SECOND_END): str,
-            vol.Optional(CONF_SECOND_START_TRIGGER): str,
-            vol.Optional(CONF_SECOND_END_TRIGGER): str,
+            vol.Optional(CONF_SECOND_START_TRIGGER): vol.In(TRIGGER_TYPES),
+            vol.Optional(CONF_SECOND_END_TRIGGER): vol.In(TRIGGER_TYPES),
             vol.Optional(CONF_SECOND_START_OFFSET): int,
             vol.Optional(CONF_SECOND_END_OFFSET): int,
             # advanced internal (not required for your customer UI)
@@ -123,4 +138,5 @@ def async_register_ws(hass: HomeAssistant) -> None:
 
         connection.send_result(msg["id"], {"ok": True, "options": opts})
 
+    websocket_api.async_register_command(hass, ws_list)
     websocket_api.async_register_command(hass, ws_set_options)

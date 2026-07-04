@@ -17,6 +17,7 @@ from .const import (
     CONF_WATER_HEATER_END_ACTION,
     CONF_WATER_HEATER_START_ACTION,
     DOMAIN,
+    LOCK_ACTIONS,
     SIGNAL_END2_UPDATED,
     SIGNAL_END_UPDATED,
     SIGNAL_START2_UPDATED,
@@ -39,6 +40,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SchedulerActionSelect(entry, scheduler, "End HVAC Action", f"{DOMAIN}_{entry.entry_id}_climate_end_action", CONF_CLIMATE_END_ACTION, CLIMATE_ACTIONS, ("climate",), SIGNAL_END_UPDATED),
             SchedulerActionSelect(entry, scheduler, "Start Water Heater Action", f"{DOMAIN}_{entry.entry_id}_water_heater_start_action", CONF_WATER_HEATER_START_ACTION, WATER_HEATER_ACTIONS, ("water_heater",), SIGNAL_START_UPDATED),
             SchedulerActionSelect(entry, scheduler, "End Water Heater Action", f"{DOMAIN}_{entry.entry_id}_water_heater_end_action", CONF_WATER_HEATER_END_ACTION, WATER_HEATER_ACTIONS, ("water_heater",), SIGNAL_END_UPDATED),
+            SchedulerActionSelect(entry, scheduler, "Start Lock Action", f"{DOMAIN}_{entry.entry_id}_lock_start_action", CONF_LOCK_START_ACTION, LOCK_ACTIONS, ("lock",), SIGNAL_START_UPDATED),
+            SchedulerActionSelect(entry, scheduler, "End Lock Action", f"{DOMAIN}_{entry.entry_id}_lock_end_action", CONF_LOCK_END_ACTION, LOCK_ACTIONS, ("lock",), SIGNAL_END_UPDATED),
         ]
     )
 

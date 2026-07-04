@@ -90,7 +90,7 @@ class SchedulerActionNumber(NumberEntity):
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.CONFIG
     _attr_native_step = 1
-    _attr_native_unit_of_measurement = "C"
+    _attr_native_unit_of_measurement = "°C"
 
     def __init__(self, entry, scheduler, name, unique_id, option_key, min_value, max_value, signal, device_types):
         self.entry = entry
