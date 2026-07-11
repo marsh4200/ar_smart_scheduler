@@ -154,6 +154,16 @@ class ARScheduler:
             "start2": None,
             "end2": None,
         }
+        # Raw solar event time (before offset) each pending fire was derived
+        # from. Needed so sun.sun updates can tell a *moved* event apart from
+        # the attribute simply rolling over to tomorrow's event while a
+        # positive-offset fire for today's event is still pending.
+        self._solar_base: dict[str, Optional[dt.datetime]] = {
+            "start": None,
+            "end": None,
+            "start2": None,
+            "end2": None,
+        }
 
         self.state = State(
             enabled=True,
@@ -287,6 +297,7 @@ class ARScheduler:
         for key in self._next_fire:
             self._next_fire[key] = None
             self._solar_messages[key] = None
+            self._solar_base[key] = None
 
     def _track_definitions(self) -> list[tuple[str, str, dt.time, int]]:
         """(which, trigger, time, offset) for every active track."""
@@ -335,6 +346,7 @@ class ARScheduler:
 
         self._next_fire[which] = self._compute_next_time_fire(when)
         self._solar_messages[which] = None
+        self._solar_base[which] = None
         setattr(
             self,
             unsub_attr,
@@ -383,26 +395,34 @@ class ARScheduler:
             return None
         return dt_util.as_local(value).isoformat()
 
-    def _resolve_next_solar_event(self, trigger: str, offset_minutes: int) -> tuple[Optional[dt.datetime], Optional[str]]:
+    def _resolve_next_solar_event(
+        self, trigger: str, offset_minutes: int
+    ) -> tuple[Optional[dt.datetime], Optional[dt.datetime], Optional[str]]:
+        """Return (scheduled_fire, base_event, message) for a solar trigger."""
         sun_state = self.hass.states.get(SUN_ENTITY_ID)
         if sun_state is None:
-            return None, f"{SUN_ENTITY_ID} is unavailable"
+            return None, None, f"{SUN_ENTITY_ID} is unavailable"
 
         attr = "next_rising" if trigger == TRIGGER_SUNRISE else "next_setting"
         raw = sun_state.attributes.get(attr)
         if raw is None:
-            return None, f"{SUN_ENTITY_ID} has no {attr} attribute"
+            return None, None, f"{SUN_ENTITY_ID} has no {attr} attribute"
 
         event_time = raw if isinstance(raw, dt.datetime) else dt_util.parse_datetime(str(raw))
         if event_time is None:
-            return None, f"Could not parse {attr} from {SUN_ENTITY_ID}"
+            return None, None, f"Could not parse {attr} from {SUN_ENTITY_ID}"
 
         event_time = dt_util.as_utc(event_time)
         scheduled = event_time + dt.timedelta(minutes=offset_minutes)
         if scheduled <= dt_util.utcnow():
+            # Negative offset (or exact-instant race) puts the fire in the
+            # past even though the event itself is the next one. Approximate
+            # tomorrow's event; the sun.sun state listener corrects this to
+            # the exact time once the attribute rolls over.
             scheduled += dt.timedelta(days=1)
+            event_time += dt.timedelta(days=1)
 
-        return scheduled, None
+        return scheduled, event_time, None
 
     def _schedule_next_solar_track(self, which, trigger, offset_minutes, handler) -> None:
         unsub_attr = f"_unsub_{which}"
@@ -411,8 +431,9 @@ class ARScheduler:
             existing()
             setattr(self, unsub_attr, None)
 
-        scheduled, message = self._resolve_next_solar_event(trigger, offset_minutes)
+        scheduled, base_event, message = self._resolve_next_solar_event(trigger, offset_minutes)
         self._next_fire[which] = scheduled
+        self._solar_base[which] = base_event
         self._solar_messages[which] = message
 
         if scheduled is None:
@@ -436,15 +457,35 @@ class ARScheduler:
             return
 
         changed = False
+        now_utc = dt_util.utcnow()
         for which, trigger, _, offset_minutes in self._track_definitions():
             if trigger not in (TRIGGER_SUNRISE, TRIGGER_SUNSET):
+                continue
+
+            pending = self._next_fire.get(which)
+            base = self._solar_base.get(which)
+
+            # NEVER cancel a timer that is due right now / overdue — it is in
+            # the middle of firing and will reschedule itself. sun.sun rolls
+            # its next_rising/next_setting attribute over at the exact moment
+            # of the event, so this handler races the trigger timer; losing
+            # that race used to cancel the fire entirely.
+            if pending is not None and pending <= now_utc:
+                continue
+
+            # A pending fire whose base event has already passed is the tail
+            # of a positive offset (e.g. sunset +15 min, sunset was 5 min
+            # ago). sun.sun now reports TOMORROW's event — that is not a
+            # moved event, so leave today's pending fire alone. It will
+            # reschedule from fresh data after it fires.
+            if pending is not None and base is not None and base <= now_utc:
                 continue
 
             # Only reschedule when the resolved solar time actually moved.
             # sun.sun updates its state frequently; tearing down and
             # recreating timers on every update is wasteful.
-            scheduled, message = self._resolve_next_solar_event(trigger, offset_minutes)
-            if scheduled == self._next_fire.get(which) and message == self._solar_messages.get(which):
+            scheduled, _base_event, message = self._resolve_next_solar_event(trigger, offset_minutes)
+            if scheduled == pending and message == self._solar_messages.get(which):
                 continue
 
             self._schedule_next_solar_track(which, trigger, offset_minutes, self._handler_for(which))
