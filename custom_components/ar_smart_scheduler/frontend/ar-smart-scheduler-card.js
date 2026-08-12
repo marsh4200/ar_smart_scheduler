@@ -14,6 +14,14 @@
  * visiting Settings -> Devices & Services.
  */
 
+// Bump this alongside manifest.json's "version" on every release. It's
+// rendered as a small marker under the card title so a stale cached copy
+// (browser cache, HA Companion App webview cache, a service-worker asset
+// cache, etc.) is visible to the eye instead of silently causing "the fix
+// didn't work" reports - what's actually running is what's shown here,
+// regardless of what version was installed on the backend.
+const CARD_VERSION = "1.5.4";
+
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
 const TRIGGERS = ["time", "sunrise", "sunset"];
@@ -75,9 +83,15 @@ const ACTION_SPECS = {
 };
 
 // 'change'-based fields (commit on blur/selection), matching the existing
-// time-input convention, so typing a name/searching entities never gets
-// wiped mid-keystroke by a re-render.
-const CHANGE_ACTS = new Set(["set-time", "rename", "add-entity", "add-name", "action-select", "add-devtype", "devtype"]);
+// time-input convention, so typing a name never gets wiped mid-keystroke by
+// a re-render. The entity picker (.entinput/.entrow) is wired separately in
+// _wireEntityPickers() since it needs live 'input' filtering, not 'change'.
+const CHANGE_ACTS = new Set(["set-time", "rename", "add-name", "action-select", "add-devtype", "devtype"]);
+
+// Entity search results are capped so the dropdown stays a manageable size
+// on a phone screen - a longer list is still reachable by typing to narrow.
+const ENTITY_RESULTS_CAP_UNFILTERED = 8;
+const ENTITY_RESULTS_CAP_FILTERED = 30;
 
 class ARSmartSchedulerCard extends HTMLElement {
   constructor() {
@@ -126,11 +140,44 @@ class ARSmartSchedulerCard extends HTMLElement {
   connectedCallback() {
     if (this._hass && !this._loaded) this._refresh();
     this._pollTimer = setInterval(() => this._refresh(true), 30000);
+
+    // Closes an open entity-picker dropdown when the user taps/clicks
+    // anywhere outside it (including outside the card entirely) - the
+    // dropdown itself doesn't otherwise know to collapse, since opening it
+    // is a plain DOM toggle done without a full _render() (see
+    // _wireEntityPickers) so typing isn't interrupted mid-keystroke.
+    this._outsideClickHandler = (ev) => {
+      const path = ev.composedPath ? ev.composedPath() : [];
+      this.shadowRoot.querySelectorAll(".entdropdown.open").forEach((dropdown) => {
+        const picker = dropdown.closest(".entpicker");
+        if (!picker || !path.includes(picker)) dropdown.classList.remove("open");
+      });
+    };
+    document.addEventListener("click", this._outsideClickHandler, true);
+
+    // The dropdown is a position:fixed overlay anchored to its input's
+    // on-screen coordinates (see _positionDropdown) - it has to be
+    // re-anchored whenever the page (or any scrollable ancestor - a
+    // capture-phase listener sees those too, even though scroll doesn't
+    // bubble) scrolls, or the viewport resizes (e.g. the on-screen keyboard
+    // opening/closing resizes the visual viewport on most mobile browsers).
+    this._repositionHandler = () => this._repositionOpenDropdowns();
+    window.addEventListener("scroll", this._repositionHandler, true);
+    window.addEventListener("resize", this._repositionHandler);
   }
 
   disconnectedCallback() {
     if (this._pollTimer) clearInterval(this._pollTimer);
     this._pollTimer = null;
+    if (this._outsideClickHandler) {
+      document.removeEventListener("click", this._outsideClickHandler, true);
+      this._outsideClickHandler = null;
+    }
+    if (this._repositionHandler) {
+      window.removeEventListener("scroll", this._repositionHandler, true);
+      window.removeEventListener("resize", this._repositionHandler);
+      this._repositionHandler = null;
+    }
   }
 
   _isEditingText() {
@@ -291,15 +338,156 @@ class ARSmartSchedulerCard extends HTMLElement {
     return (st && st.attributes && st.attributes.friendly_name) || entityId;
   }
 
-  _entityOptions(exclude) {
-    if (!this._hass) return "";
+  // Custom, fully-controlled entity picker - deliberately NOT a native
+  // <datalist>. <datalist> suggestion dropdowns are unreliable to unusable
+  // on mobile (iOS Safari essentially never shows them; Android renders
+  // them as unstyled browser chrome that doesn't match the card and can
+  // look broken inside a shadow root). This renders and wires its own
+  // dropdown so behavior is identical and touch-friendly everywhere.
+  _matchingEntities(exclude, search) {
+    if (!this._hass) return [];
     const excludeSet = new Set(exclude || []);
     const domains = new Set(this._domains);
-    return Object.keys(this._hass.states)
-      .filter((id) => domains.has(id.split(".", 1)[0]) && !excludeSet.has(id))
-      .sort()
-      .map((id) => `<option value="${this._esc(id)}">${this._esc(this._entityLabel(id))}</option>`)
+    const q = (search || "").trim().toLowerCase();
+    const all = Object.keys(this._hass.states).filter(
+      (id) => domains.has(id.split(".", 1)[0]) && !excludeSet.has(id)
+    );
+    const matches = q
+      ? all.filter((id) => id.toLowerCase().includes(q) || this._entityLabel(id).toLowerCase().includes(q))
+      : all;
+    matches.sort((a, b) => this._entityLabel(a).localeCompare(this._entityLabel(b)));
+    return matches;
+  }
+
+  _entityRows(formId, exclude, search) {
+    const matches = this._matchingEntities(exclude, search);
+    const cap = search ? ENTITY_RESULTS_CAP_FILTERED : ENTITY_RESULTS_CAP_UNFILTERED;
+    const shown = matches.slice(0, cap);
+    if (!shown.length) {
+      return `<div class="entempty">${search ? "No matching entities" : "No entities available"}</div>`;
+    }
+    const rows = shown
+      .map(
+        (id) => `
+        <button type="button" class="entrow" data-form="${this._esc(formId)}" data-ent="${this._esc(id)}">
+          <span class="entname">${this._esc(this._entityLabel(id))}</span>
+          <span class="entid">${this._esc(id)}</span>
+        </button>`
+      )
       .join("");
+    const remaining = matches.length - shown.length;
+    const more = remaining > 0 ? `<div class="entmore">+${remaining} more — keep typing to narrow</div>` : "";
+    return rows + more;
+  }
+
+  _entityPickerHtml(formId, exclude) {
+    return `
+      <div class="entpicker">
+        <input type="text" class="entinput" placeholder="+ add entity… (tap to browse)" data-form="${this._esc(formId)}"
+               autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="entdropdown" data-form="${this._esc(formId)}">${this._entityRows(formId, exclude, "")}</div>
+      </div>`;
+  }
+
+  _pickEntity(formId, ent) {
+    if (formId === "new") {
+      if (!this._addSelected.includes(ent)) this._addSelected.push(ent);
+      this._render();
+      return;
+    }
+    const s = this._findScheduler(formId);
+    if (s && !(s.targets || []).includes(ent)) {
+      this._setGeneral(formId, { target_entity: [...(s.targets || []), ent] });
+    }
+  }
+
+  // The dropdown is rendered as a position:fixed overlay (see .entdropdown
+  // in _render()'s <style>) instead of sitting in normal document flow.
+  // Earlier this was in-flow, which had two mobile-specific failure modes:
+  // an ancestor with overflow/height constraints (e.g. a dashboard grid
+  // section) could clip it entirely, and the on-screen keyboard could cover
+  // it below the fold - both looking exactly like "no dropdown appears".
+  // An overlay positioned from the input's real viewport coordinates avoids
+  // both: it can't be clipped by a card/grid ancestor, and it's placed
+  // above the input instead of below when there isn't room underneath.
+  _positionDropdown(input, dropdown) {
+    if (typeof input.getBoundingClientRect !== "function") return;
+    const r = input.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    const margin = 6;
+    const minHeight = 100;
+    const maxHeight = 240;
+    const spaceBelow = vh - r.bottom - margin;
+    const spaceAbove = r.top - margin;
+    const openUpward = spaceBelow < minHeight && spaceAbove > spaceBelow;
+
+    dropdown.style.left = `${Math.max(0, r.left)}px`;
+    dropdown.style.width = `${r.width}px`;
+    if (openUpward) {
+      dropdown.style.top = "";
+      dropdown.style.bottom = `${Math.max(0, vh - r.top + margin)}px`;
+      dropdown.style.maxHeight = `${Math.max(minHeight, Math.min(maxHeight, spaceAbove))}px`;
+    } else {
+      dropdown.style.bottom = "";
+      dropdown.style.top = `${r.bottom + margin}px`;
+      dropdown.style.maxHeight = `${Math.max(minHeight, Math.min(maxHeight, spaceBelow))}px`;
+    }
+  }
+
+  // Re-run positioning for every currently-open dropdown - used on
+  // scroll/resize (registered in connectedCallback) and after a short delay
+  // following focus, since mobile browsers auto-scroll a focused input into
+  // view (to clear the on-screen keyboard) slightly *after* focus fires,
+  // which would otherwise leave a just-opened dropdown anchored to the
+  // input's pre-scroll position.
+  _repositionOpenDropdowns() {
+    this.shadowRoot.querySelectorAll(".entdropdown.open").forEach((dropdown) => {
+      const picker = dropdown.closest(".entpicker");
+      const input = picker && picker.querySelector(".entinput");
+      if (input) this._positionDropdown(input, dropdown);
+    });
+  }
+
+  _excludeFor(formId) {
+    if (formId === "new") return this._addSelected;
+    const s = this._findScheduler(formId);
+    return (s && s.targets) || [];
+  }
+
+  _wireEntityRows(container) {
+    container.querySelectorAll(".entrow").forEach((row) => {
+      row.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        this._pickEntity(row.dataset.form, row.dataset.ent);
+      });
+    });
+  }
+
+  _wireEntityPickers() {
+    this.shadowRoot.querySelectorAll(".entpicker").forEach((picker) => {
+      const input = picker.querySelector(".entinput");
+      const dropdown = picker.querySelector(".entdropdown");
+      if (!input || !dropdown) return;
+      const formId = input.dataset.form;
+
+      this._wireEntityRows(dropdown);
+
+      input.addEventListener("focus", (ev) => {
+        ev.stopPropagation();
+        dropdown.classList.add("open");
+        this._positionDropdown(input, dropdown);
+        if (typeof window.setTimeout === "function") {
+          window.setTimeout(() => this._repositionOpenDropdowns(), 350);
+        }
+      });
+      input.addEventListener("click", (ev) => ev.stopPropagation());
+      input.addEventListener("input", () => {
+        dropdown.innerHTML = this._entityRows(formId, this._excludeFor(formId), input.value);
+        dropdown.classList.add("open");
+        this._positionDropdown(input, dropdown);
+        this._wireEntityRows(dropdown);
+      });
+    });
   }
 
   _chipsHtml(entities, formId) {
@@ -410,9 +598,7 @@ class ARSmartSchedulerCard extends HTMLElement {
         <div class="manage-row">
           <div class="manage-label">Entities</div>
           <div class="chips">${this._chipsHtml(s.targets, s.entry_id)}</div>
-          <input type="text" class="entinput" list="ar-ent-${s.entry_id}" placeholder="+ add entity…"
-                 data-act="add-entity" data-form="${s.entry_id}" data-entry="${s.entry_id}">
-          <datalist id="ar-ent-${s.entry_id}">${this._entityOptions(s.targets)}</datalist>
+          ${this._entityPickerHtml(s.entry_id, s.targets)}
         </div>
         ${this._actionsSection(s)}
         <div class="manage-row manage-danger">
@@ -479,8 +665,7 @@ class ARSmartSchedulerCard extends HTMLElement {
         <div class="addform-row">
           <div class="manage-label">Entities to control</div>
           <div class="chips">${this._chipsHtml(this._addSelected, "new")}</div>
-          <input type="text" class="entinput" list="ar-ent-new" placeholder="+ add entity…" data-act="add-entity" data-form="new" data-entry="new">
-          <datalist id="ar-ent-new">${this._entityOptions(this._addSelected)}</datalist>
+          ${this._entityPickerHtml("new", this._addSelected)}
         </div>
         <div class="addform-row two-col">
           <div>
@@ -532,7 +717,9 @@ class ARSmartSchedulerCard extends HTMLElement {
       <style>
         :host { display:block; }
         ha-card { padding: 12px 16px 16px; }
-        .card-title { font-size: 1.15em; font-weight: 500; padding: 4px 0 10px; color: var(--primary-text-color); }
+        .card-title-row { display:flex; align-items:baseline; gap:8px; padding: 4px 0 10px; }
+        .card-title { font-size: 1.15em; font-weight: 500; color: var(--primary-text-color); }
+        .card-version { font-size: 0.68em; color: var(--secondary-text-color); opacity: 0.45; }
         .toolbar { display:flex; justify-content:flex-end; margin: -6px 0 10px; }
         .toolbar button { display:flex; align-items:center; gap:6px; background: var(--primary-color); color: var(--text-primary-color, #fff); border:none; border-radius: 999px; padding: 7px 14px; font-size:0.88em; font-weight:500; cursor:pointer; }
         .empty { color: var(--secondary-text-color); padding: 12px 4px; text-align:center; }
@@ -540,7 +727,7 @@ class ARSmartSchedulerCard extends HTMLElement {
         .sched.disabled .titleblock, .sched.disabled .body { opacity: 0.55; }
         .row.head { display:flex; align-items:center; gap: 10px; padding: 10px 12px; cursor:pointer; }
         .titleblock { flex:1; min-width:0; }
-        .name-input { font-weight: 500; color: var(--primary-text-color); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; font-size: 1em; font-family: inherit; width: 100%; box-sizing: border-box; }
+        .name-input { font-weight: 500; color: var(--primary-text-color); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; font-size: 16px; font-family: inherit; width: 100%; box-sizing: border-box; }
         .name-input:hover, .name-input:focus { border-color: var(--divider-color); background: var(--secondary-background-color); }
         .sub { font-size: 0.85em; color: var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .chev svg { width: 22px; height:22px; fill: var(--secondary-text-color); transition: transform .15s ease; flex: none; }
@@ -557,8 +744,26 @@ class ARSmartSchedulerCard extends HTMLElement {
         .trig { display:flex; align-items:center; gap:6px; background:transparent; border:none; color: var(--primary-color); cursor:pointer; padding: 0 0 6px; font-size: 0.9em; }
         .trig.standalone { border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
         .trig-ic { width: 18px; height: 18px; fill: currentColor; }
-        input[type="time"], select, .addname, .entinput { width: 100%; box-sizing: border-box; background: var(--secondary-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px; font-size: 1em; font-family: inherit; }
+        /* font-size >=16px on text inputs stops iOS Safari auto-zooming the
+           whole page in on focus - a common source of "everything looks
+           messed up" on mobile once you tap a field. */
+        input[type="time"], select, .addname, .entinput { width: 100%; box-sizing: border-box; background: var(--secondary-background-color); color: var(--primary-text-color); border: 1px solid var(--divider-color); border-radius: 8px; padding: 6px; font-size: 16px; font-family: inherit; }
         select { padding: 7px 6px; }
+        .entpicker { position: relative; }
+        .entinput { padding: 10px 8px; }
+        /* Positioned via JS (_positionDropdown) as a fixed overlay anchored
+           to the input's on-screen coordinates, not left in normal document
+           flow - a card/grid ancestor's overflow or height can't clip an
+           overlay the way it could clip something in-flow, and it can open
+           upward instead of being hidden behind the on-screen keyboard. */
+        .entdropdown { display:none; position: fixed; box-sizing: border-box; border: 1px solid var(--divider-color); border-radius: 10px; overflow-y: auto; background: var(--secondary-background-color); box-shadow: 0 4px 18px rgba(0,0,0,0.35); -webkit-overflow-scrolling: touch; z-index: 9999; }
+        .entdropdown.open { display:block; }
+        .entrow { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; box-sizing:border-box; padding: 11px 12px; background:transparent; border:none; border-bottom:1px solid var(--divider-color); text-align:left; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color: rgba(0,0,0,0.15); }
+        .entrow:last-child { border-bottom:none; }
+        .entrow:hover, .entrow:active { background: var(--card-background-color); }
+        .entname { color: var(--primary-text-color); font-size: 0.95em; }
+        .entid { color: var(--secondary-text-color); font-size: 0.78em; }
+        .entempty, .entmore { padding: 10px 12px; color: var(--secondary-text-color); font-size: 0.85em; }
         .offset { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top: 6px; }
         .offset button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); cursor:pointer; font-size: 1.1em; flex: none; }
         .offset span { font-variant-numeric: tabular-nums; }
@@ -595,7 +800,10 @@ class ARSmartSchedulerCard extends HTMLElement {
         .addform-actions button:disabled { opacity: 0.6; cursor: default; }
       </style>
       <ha-card>
-        <div class="card-title">${title}</div>
+        <div class="card-title-row">
+          <div class="card-title">${title}</div>
+          <div class="card-version">v${CARD_VERSION}</div>
+        </div>
         <div class="toolbar">
           ${
             this._addOpen
@@ -620,6 +828,7 @@ class ARSmartSchedulerCard extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-stop]").forEach((el) => {
       el.addEventListener("click", (ev) => ev.stopPropagation());
     });
+    this._wireEntityPickers();
   }
 
   _findScheduler(entryId) {
@@ -668,25 +877,6 @@ class ARSmartSchedulerCard extends HTMLElement {
       const name = el.value.trim();
       if (name) this._setGeneral(el.dataset.entry, { name });
       else el.value = (s && s.name) || "";
-      return;
-    }
-
-    if (act === "add-entity") {
-      const val = el.value.trim();
-      const formId = el.dataset.form;
-      if (!val || !this._hass.states[val]) {
-        el.value = "";
-        return;
-      }
-      if (formId === "new") {
-        if (!this._addSelected.includes(val)) this._addSelected.push(val);
-        this._render();
-      } else {
-        const s = this._findScheduler(formId);
-        if (s && !(s.targets || []).includes(val)) {
-          this._setGeneral(formId, { target_entity: [...(s.targets || []), val] });
-        }
-      }
       return;
     }
 

@@ -1,3 +1,92 @@
+# AR Smart Scheduler v1.5.4 — Patch Notes
+
+## Fix: entity picker dropdown still not showing on some phones (round 2)
+
+v1.5.3 replaced the native `<datalist>` with a custom dropdown, which fixed
+it for most cases - but it was still built as a normal in-page element
+(opens in document flow, directly under the "+ add entity" field). That has
+two remaining failure modes on mobile that match "no dropdown appears,
+tapping does something funny":
+
+- **The on-screen keyboard covers it.** The keyboard eats roughly the
+  bottom 40-50% of the screen. If the field you tapped is anywhere in the
+  lower half of the page, the dropdown - rendered directly below that field
+  - opens up right behind the keyboard. It's technically there, just never
+  visible.
+- **A dashboard layout can clip it.** Some card layouts (grid/section-based
+  dashboards in particular) constrain a card's height or overflow. Content
+  that grows past that boundary - like a dropdown popping open below a
+  field near the bottom of a card - can get cut off entirely instead of
+  pushing the card taller.
+
+**Fix:** the dropdown is now a floating overlay, positioned in JavaScript
+from the tapped field's actual on-screen coordinates, instead of sitting in
+the normal page layout. Concretely:
+
+- It always renders **above the on-screen keyboard**, because it's
+  positioned relative to the visible viewport, not the full page.
+- If there isn't room to open it below the field (too close to the bottom
+  of the screen/keyboard), it **opens upward** above the field instead.
+- It can no longer be **clipped by a card or dashboard container**, since
+  it's no longer inside that container's normal flow.
+- It re-positions itself automatically if the page scrolls or the visible
+  viewport resizes (which is exactly what happens when the keyboard
+  animates open/closed).
+
+Verified with a real (non-simulated) mobile-viewport browser test - not
+just the logic-level test used before - covering: a field near the bottom
+of a long scrolled page, and the viewport shrinking to simulate the
+keyboard opening. In both cases the dropdown stayed fully visible and
+correctly positioned.
+
+## New: on-screen version marker
+
+The card now shows a small `v1.5.4`-style marker next to its title. This
+release has now shipped the same-looking fix twice ("no dropdown" was
+reported again after v1.5.3's rewrite) - part of ruling out what's actually
+happening if it's ever reported a third time is confirming the *browser* is
+actually running the new file at all, versus an old cached copy (browser
+cache, or - especially relevant for the Companion App - its own webview
+cache). If a "no dropdown" report comes with a screenshot showing an old
+version number here, that's a caching problem, not a code problem, and
+points straight at "fully close and reopen the Companion App" or clearing
+its cache rather than another code change.
+
+No backend changes in this release - frontend (`ar-smart-scheduler-card.js`)
+only.
+
+---
+
+# AR Smart Scheduler v1.5.3 — Patch Notes
+
+## Fix: entity picker didn't work on mobile
+
+The "+ add entity…" field used a native `<input list="...">` / `<datalist>`
+for suggestions. That's unreliable on mobile: iOS Safari essentially never
+shows `<datalist>` suggestions at all (tapping the field just does nothing
+visible), and Android renders them as unstyled browser-native chrome that
+doesn't match the card and can look broken inside a shadow root — which
+matches exactly what was reported ("no drop down... all messed up").
+
+Replaced it with a fully custom, self-built dropdown (search input +
+touch-sized rows, same on every platform):
+
+- Tapping the field opens a dropdown of matching entities immediately
+  (capped to a short list until you start typing).
+- Typing filters it live.
+- Tapping a row adds that entity — same as before.
+- Tapping anywhere outside the field/dropdown closes it.
+
+Also bumped all text inputs (entity search, schedule name, rename field) to
+`font-size: 16px` — anything smaller makes iOS Safari auto-zoom the whole
+page in when you tap the field, which is a common second cause of "mobile
+looks messed up" once the first issue is fixed.
+
+No backend changes in this release — frontend (`ar-smart-scheduler-card.js`)
+only.
+
+---
+
 # AR Smart Scheduler v1.5.2 — Patch Notes
 
 ## Clients no longer need an admin account to use the card
