@@ -1,3 +1,34 @@
+# AR Smart Scheduler v1.6.0 — Patch Notes
+
+## Entity picker: grouped by domain (Lights, Climate, Media players, ...)
+
+Previously the "+ add entity" dropdown showed a single flat, alphabetical
+list capped at 8 entities until you typed something to narrow it down. On a
+home with entities spread across several domains, that cap meant most
+entities were invisible until you already knew (roughly) what to type -
+which read as "the dropdown isn't showing all my entities."
+
+**Fix:** entities are now grouped under a small header per domain (Lights,
+Switches, Climate, Media players, Covers, Fans, Water heaters, Locks, Input
+booleans, ...), each sorted alphabetically by name. This applies both when
+the picker first opens (no search text yet) and while typing to filter.
+
+- Each group shows up to 6 entities before typing, or up to 20 once you've
+  typed a filter — a "+N more &lt;group&gt; — keep typing to narrow" hint
+  appears under a group when it's been capped, same idea as before but
+  scoped per domain instead of the whole list.
+- Domain headers are sticky while scrolling the dropdown, so it's always
+  clear which group you're looking at.
+- A domain the backend doesn't have a hand-picked label for still gets a
+  sensible one (e.g. `input_boolean` → "Input boolean") instead of being
+  dropped.
+
+No backend changes were required — this is a frontend-only card update
+(`ar-smart-scheduler-card.js`, now v1.6.0). Hard-refresh the browser (or
+clear the HA Companion App's cache) so the new card JS is picked up.
+
+---
+
 # AR Smart Scheduler v1.5.4 — Patch Notes
 
 ## Fix: entity picker dropdown still not showing on some phones (round 2)

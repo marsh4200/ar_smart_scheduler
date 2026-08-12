@@ -20,7 +20,7 @@
 // cache, etc.) is visible to the eye instead of silently causing "the fix
 // didn't work" reports - what's actually running is what's shown here,
 // regardless of what version was installed on the backend.
-const CARD_VERSION = "1.5.4";
+const CARD_VERSION = "1.6.0";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
@@ -88,10 +88,30 @@ const ACTION_SPECS = {
 // _wireEntityPickers() since it needs live 'input' filtering, not 'change'.
 const CHANGE_ACTS = new Set(["set-time", "rename", "add-name", "action-select", "add-devtype", "devtype"]);
 
-// Entity search results are capped so the dropdown stays a manageable size
-// on a phone screen - a longer list is still reachable by typing to narrow.
-const ENTITY_RESULTS_CAP_UNFILTERED = 8;
-const ENTITY_RESULTS_CAP_FILTERED = 30;
+// Entity search results are grouped by domain (Lights, Climate, Media
+// Players, ...) so a home with entities across many domains stays scannable
+// instead of one long alphabetical list where most entries never fit on
+// screen. Each group is still capped so the dropdown stays a manageable
+// size on a phone screen - a longer group is still reachable by typing to
+// narrow (narrowing text matches both entity id and friendly name).
+const ENTITY_GROUP_CAP_UNFILTERED = 6;
+const ENTITY_GROUP_CAP_FILTERED = 20;
+
+// Friendly section labels for the entity picker's domain groups. Anything
+// not listed here (a domain added by a future backend release, or a custom
+// integration's domain) still gets a group - see _domainLabel() - just with
+// a generated label instead of a hand-tuned one.
+const DOMAIN_LABELS = {
+  light: "Lights",
+  switch: "Switches",
+  climate: "Climate",
+  media_player: "Media players",
+  cover: "Covers",
+  fan: "Fans",
+  water_heater: "Water heaters",
+  lock: "Locks",
+  input_boolean: "Input booleans",
+};
 
 class ARSmartSchedulerCard extends HTMLElement {
   constructor() {
@@ -338,6 +358,33 @@ class ARSmartSchedulerCard extends HTMLElement {
     return (st && st.attributes && st.attributes.friendly_name) || entityId;
   }
 
+  // Human label for a domain group header. Known domains get a hand-picked
+  // label (DOMAIN_LABELS); anything else falls back to title-casing the
+  // domain id (e.g. "input_boolean" -> "Input boolean") so a domain the
+  // backend adds later still gets a sensible header instead of a blank one.
+  _domainLabel(domain) {
+    if (DOMAIN_LABELS[domain]) return DOMAIN_LABELS[domain];
+    const words = String(domain).split("_").filter(Boolean);
+    if (!words.length) return domain;
+    return words.map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(" ");
+  }
+
+  // Buckets an already-filtered, already-sorted entity id list into
+  // per-domain groups (light, climate, media_player, ...), sorted by group
+  // label. Entities keep the sort order they arrived in within each group,
+  // which _matchingEntities already sorts by friendly name.
+  _groupEntities(ids) {
+    const groups = new Map();
+    (ids || []).forEach((id) => {
+      const domain = id.split(".", 1)[0];
+      if (!groups.has(domain)) groups.set(domain, []);
+      groups.get(domain).push(id);
+    });
+    return [...groups.entries()]
+      .map(([domain, entityIds]) => ({ domain, label: this._domainLabel(domain), ids: entityIds }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
   // Custom, fully-controlled entity picker - deliberately NOT a native
   // <datalist>. <datalist> suggestion dropdowns are unreliable to unusable
   // on mobile (iOS Safari essentially never shows them; Android renders
@@ -361,23 +408,36 @@ class ARSmartSchedulerCard extends HTMLElement {
 
   _entityRows(formId, exclude, search) {
     const matches = this._matchingEntities(exclude, search);
-    const cap = search ? ENTITY_RESULTS_CAP_FILTERED : ENTITY_RESULTS_CAP_UNFILTERED;
-    const shown = matches.slice(0, cap);
-    if (!shown.length) {
+    if (!matches.length) {
       return `<div class="entempty">${search ? "No matching entities" : "No entities available"}</div>`;
     }
-    const rows = shown
-      .map(
-        (id) => `
+    const cap = search ? ENTITY_GROUP_CAP_FILTERED : ENTITY_GROUP_CAP_UNFILTERED;
+    const groups = this._groupEntities(matches);
+    return groups
+      .map((group) => {
+        const shown = group.ids.slice(0, cap);
+        const rows = shown
+          .map(
+            (id) => `
         <button type="button" class="entrow" data-form="${this._esc(formId)}" data-ent="${this._esc(id)}">
           <span class="entname">${this._esc(this._entityLabel(id))}</span>
           <span class="entid">${this._esc(id)}</span>
         </button>`
-      )
+          )
+          .join("");
+        const remaining = group.ids.length - shown.length;
+        const more =
+          remaining > 0
+            ? `<div class="entmore">+${remaining} more ${this._esc(group.label.toLowerCase())} — keep typing to narrow</div>`
+            : "";
+        return `
+        <div class="entgroup">
+          <div class="entgroup-header">${this._esc(group.label)}<span class="entgroup-count">${group.ids.length}</span></div>
+          ${rows}
+          ${more}
+        </div>`;
+      })
       .join("");
-    const remaining = matches.length - shown.length;
-    const more = remaining > 0 ? `<div class="entmore">+${remaining} more — keep typing to narrow</div>` : "";
-    return rows + more;
   }
 
   _entityPickerHtml(formId, exclude) {
@@ -758,8 +818,11 @@ class ARSmartSchedulerCard extends HTMLElement {
            upward instead of being hidden behind the on-screen keyboard. */
         .entdropdown { display:none; position: fixed; box-sizing: border-box; border: 1px solid var(--divider-color); border-radius: 10px; overflow-y: auto; background: var(--secondary-background-color); box-shadow: 0 4px 18px rgba(0,0,0,0.35); -webkit-overflow-scrolling: touch; z-index: 9999; }
         .entdropdown.open { display:block; }
+        .entgroup:not(:last-child) { border-bottom: 1px solid var(--divider-color); }
+        .entgroup-header { position: sticky; top: 0; z-index: 1; display:flex; align-items:center; justify-content:space-between; gap:6px; padding: 6px 12px; background: var(--card-background-color); color: var(--secondary-text-color); font-size: 0.72em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+        .entgroup-count { color: var(--secondary-text-color); font-size: 0.95em; font-weight: 400; text-transform: none; letter-spacing: normal; opacity: 0.7; }
         .entrow { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; box-sizing:border-box; padding: 11px 12px; background:transparent; border:none; border-bottom:1px solid var(--divider-color); text-align:left; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color: rgba(0,0,0,0.15); }
-        .entrow:last-child { border-bottom:none; }
+        .entgroup .entrow:last-child { border-bottom:none; }
         .entrow:hover, .entrow:active { background: var(--card-background-color); }
         .entname { color: var(--primary-text-color); font-size: 0.95em; }
         .entid { color: var(--secondary-text-color); font-size: 0.78em; }
