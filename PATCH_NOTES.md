@@ -23,9 +23,33 @@ the picker first opens (no search text yet) and while typing to filter.
   sensible one (e.g. `input_boolean` → "Input boolean") instead of being
   dropped.
 
-No backend changes were required — this is a frontend-only card update
-(`ar-smart-scheduler-card.js`, now v1.6.0). Hard-refresh the browser (or
-clear the HA Companion App's cache) so the new card JS is picked up.
+## Fix: card kept showing the old version number after updating
+
+Every release so far has depended on everyone remembering to hard-refresh
+the browser (or clear the HA Companion App's cache) to actually see the new
+card - `add_extra_js_url()` registered the bundled card at a fixed URL
+(`/ar_smart_scheduler_files/ar-smart-scheduler-card.js`) that never changed
+between releases, so a browser that had already cached it could keep
+serving the old file indefinitely even after the file on disk was replaced
+and HA restarted. `cache_headers=False` on the static path only affects
+what HA's own server tells the browser; it doesn't stop a browser (or the
+Companion App's webview) from having already cached the URL from a prior
+visit.
+
+**Fix:** the registered URL now includes the integration's version as a
+query string (`...ar-smart-scheduler-card.js?v=1.6.0`), read straight out of
+`manifest.json`. Since browsers key their cache on the full URL, bumping the
+version - already done for every release - now forces a fresh fetch
+automatically, with no manual cache-clearing needed going forward.
+
+**One-time catch:** this fix ships *in* v1.6.0, so upgrading to v1.6.0 itself
+still needs one manual hard-refresh (or Companion App cache clear) to break
+free of whatever URL was cached from v1.5.4 or earlier. Every release after
+this one should just work.
+
+Backend change: `custom_components/ar_smart_scheduler/__init__.py`
+(`_card_version()` + the `add_extra_js_url()` call). Restart HA once after
+updating.
 
 ---
 

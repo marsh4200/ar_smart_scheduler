@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -22,6 +23,22 @@ _LOGGER = logging.getLogger(__name__)
 _FRONTEND_FLAG = f"{DOMAIN}_frontend_registered"
 
 
+def _card_version() -> str:
+    """Read the integration version out of manifest.json.
+
+    Used purely to cache-bust the bundled card's URL (see below) - never
+    fatal if it can't be read, since a missing/odd version just means the
+    URL doesn't change between releases, not that the card fails to load.
+    """
+    try:
+        manifest_path = Path(__file__).parent / "manifest.json"
+        with manifest_path.open(encoding="utf-8") as manifest_file:
+            return str(json.load(manifest_file).get("version") or "0")
+    except Exception:  # noqa: BLE001 - best-effort only
+        _LOGGER.debug("Could not read manifest.json for card cache-busting", exc_info=True)
+        return "0"
+
+
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Serve the bundled Lovelace card so no separate HACS frontend install is needed."""
     if hass.data.get(_FRONTEND_FLAG):
@@ -40,7 +57,18 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     except ImportError:
         hass.http.register_static_path(FRONTEND_URL_BASE, str(frontend_dir), cache_headers=False)
 
-    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}")
+    # The "?v=<version>" query string is a cache-buster: browsers (and the
+    # HA Companion App's webview in particular) key their cache on the full
+    # URL, so an unchanging URL can keep serving a stale cached copy of the
+    # card indefinitely even after the file on disk has been updated and HA
+    # restarted - exactly the "card still shows the old version number"
+    # reports this integration has hit release after release. Bumping
+    # manifest.json's version (already done for every release) now changes
+    # this URL automatically, forcing browsers to fetch the new file instead
+    # of relying on everyone remembering to hard-refresh.
+    add_extra_js_url(
+        hass, f"{FRONTEND_URL_BASE}/{FRONTEND_CARD_FILENAME}?v={_card_version()}"
+    )
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
