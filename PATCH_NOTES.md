@@ -1,3 +1,31 @@
+# AR Smart Scheduler v1.5.1 — Patch Notes
+
+## Fix: setup crash — `'Schema' object has no attribute 'validators'`
+
+v1.5.0 crashed on startup with:
+
+```
+Error during setup of component ar_smart_scheduler: 'Schema' object has no attribute 'validators'
+File ".../websocket_api/decorators.py", line 142, in websocket_command
+    command = schema.validators[0].schema["type"]
+```
+
+`websocket_api.websocket_command()` only accepts a plain `dict`, or a
+`vol.All(...)` whose first item is the `vol.Schema` — it reaches into
+`schema.validators[0]` to read the command's `"type"` and to `.extend()` the
+base `{id: ...}` message schema. The new `ar_smart_scheduler/create` and
+`ar_smart_scheduler/set_actions` commands needed `extra=vol.ALLOW_EXTRA`
+(their field set varies per device type), so they were registered with a
+bare `vol.Schema({...}, extra=vol.ALLOW_EXTRA)` — which has no `.validators`
+attribute and crashed integration setup entirely (every entity from this
+integration went unavailable). Fixed by wrapping both in `vol.All(...)`,
+verified against Home Assistant's actual `websocket_command()` source and
+voluptuous's `Schema.extend()` (which inherits `extra` from the schema being
+extended, so `ALLOW_EXTRA` survives). No config or data changes — just
+update and restart.
+
+---
+
 # AR Smart Scheduler v1.5.0 — Patch Notes
 
 ## Repo merge: `ar-scheduler-card` is now part of this integration

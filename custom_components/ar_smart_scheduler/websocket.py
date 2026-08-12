@@ -181,21 +181,33 @@ def async_register_ws(hass: HomeAssistant) -> None:
 
     @websocket_api.require_admin
     @websocket_api.websocket_command(
-        vol.Schema(
-            {
-                vol.Required("type"): f"{DOMAIN}/create",
-                vol.Required(CONF_NAME): str,
-                vol.Required(CONF_TARGET_ENTITY): [str],
-                vol.Optional(CONF_DEVICE_TYPE): vol.In(DEVICE_TYPES),
-                vol.Optional(CONF_WEEKDAYS): [vol.In(WEEKDAY_KEYS)],
-                vol.Optional(CONF_START_TRIGGER): vol.In(TRIGGER_TYPES),
-                vol.Optional(CONF_END_TRIGGER): vol.In(TRIGGER_TYPES),
-                vol.Optional(CONF_START): str,
-                vol.Optional(CONF_END): str,
-                vol.Optional(CONF_START_OFFSET): int,
-                vol.Optional(CONF_END_OFFSET): int,
-            },
-            extra=vol.ALLOW_EXTRA,
+        # NOTE: websocket_command() requires either a plain dict, or a
+        # vol.All(...) whose *first* item is the vol.Schema (it reaches in
+        # via `schema.validators[0]` to read "type" and to .extend() the
+        # base {id: ...} message schema - see
+        # homeassistant/components/websocket_api/decorators.py). A bare
+        # vol.Schema(..., extra=vol.ALLOW_EXTRA) doesn't have .validators
+        # and raises `AttributeError: 'Schema' object has no attribute
+        # 'validators'` at integration setup. Wrapping in vol.All(...) (even
+        # with a single item) is what makes extra=vol.ALLOW_EXTRA usable
+        # here.
+        vol.All(
+            vol.Schema(
+                {
+                    vol.Required("type"): f"{DOMAIN}/create",
+                    vol.Required(CONF_NAME): str,
+                    vol.Required(CONF_TARGET_ENTITY): [str],
+                    vol.Optional(CONF_DEVICE_TYPE): vol.In(DEVICE_TYPES),
+                    vol.Optional(CONF_WEEKDAYS): [vol.In(WEEKDAY_KEYS)],
+                    vol.Optional(CONF_START_TRIGGER): vol.In(TRIGGER_TYPES),
+                    vol.Optional(CONF_END_TRIGGER): vol.In(TRIGGER_TYPES),
+                    vol.Optional(CONF_START): str,
+                    vol.Optional(CONF_END): str,
+                    vol.Optional(CONF_START_OFFSET): int,
+                    vol.Optional(CONF_END_OFFSET): int,
+                },
+                extra=vol.ALLOW_EXTRA,
+            )
         )
     )
     @websocket_api.async_response
@@ -290,13 +302,17 @@ def async_register_ws(hass: HomeAssistant) -> None:
 
     @websocket_api.require_admin
     @websocket_api.websocket_command(
-        vol.Schema(
-            {
-                vol.Required("type"): f"{DOMAIN}/set_actions",
-                vol.Required("entry_id"): str,
-                vol.Optional(CONF_DEVICE_TYPE): vol.In(DEVICE_TYPES),
-            },
-            extra=vol.ALLOW_EXTRA,
+        # See the matching note on ws_create above: must be vol.All(...),
+        # not a bare vol.Schema(...).
+        vol.All(
+            vol.Schema(
+                {
+                    vol.Required("type"): f"{DOMAIN}/set_actions",
+                    vol.Required("entry_id"): str,
+                    vol.Optional(CONF_DEVICE_TYPE): vol.In(DEVICE_TYPES),
+                },
+                extra=vol.ALLOW_EXTRA,
+            )
         )
     )
     @websocket_api.async_response
