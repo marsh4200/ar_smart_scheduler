@@ -1,3 +1,47 @@
+# AR Smart Scheduler v1.6.3 — Patch Notes
+
+## Fix: card randomly shows "Configuration error" on refresh, then comes back, then doesn't
+
+Reported as: the card works, you refresh the dashboard and it's replaced by
+a "Configuration error" placeholder, you wait and refresh again and it's
+back (showing the correct current version), refresh again and it's gone
+again - no pattern to it, nothing in the log.
+
+**Root cause:** the bundled card's static file was registered with
+`cache_headers=False`, which tells the browser not to cache it. That means
+*every single page load* had to fetch the ~50 KB card file over the network
+fresh, with no cached fallback - and that fetch races against Lovelace
+parsing the dashboard and trying to create the
+`<ar-smart-scheduler-card>` element. Win the race (fast network, warm
+server) and the card renders normally. Lose it (slow network, a cold
+connection, HA still busy right after a restart, a phone on flaky wifi -
+anything that pushes the fetch past however long Lovelace waits for the
+custom element to become defined) and Lovelace gives up and shows
+"Configuration error" instead. Since it depends on load timing rather than
+on anything actually being broken, it looks exactly like what got
+reported: seemingly random, and "trying again" sometimes fixes it purely by
+chance.
+
+`cache_headers=False` made some sense back when the card's URL never
+changed between releases (see the v1.6.0 notes below) - disabling the cache
+was a blunt way to avoid serving a stale old version forever. It stopped
+being necessary the moment the URL became version-tagged
+(`...ar-smart-scheduler-card.js?v=1.6.2`) in v1.6.0: a new release now gets
+a new URL regardless of caching, so there's no longer a reason to force a
+fresh network fetch on every single page load.
+
+**Fix:** `cache_headers=True`. The browser can now cache the file normally,
+which removes the network fetch from that race on every load after the
+first - the card should load instantly and reliably from then on, and a
+future version bump still forces a fresh fetch automatically because the
+URL changes.
+
+Backend change: `custom_components/ar_smart_scheduler/__init__.py`. Restart
+HA after updating, then do one hard-refresh so the browser has something
+cached to work from.
+
+---
+
 # AR Smart Scheduler v1.6.2 — Patch Notes
 
 ## Entity picker: only show the name you gave it in Home Assistant

@@ -47,15 +47,31 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
     frontend_dir = Path(__file__).parent / "frontend"
 
+    # cache_headers=True: browsers may cache this file aggressively. That's
+    # safe (and wanted) now that the URL below is version-tagged - a new
+    # release gets a new URL, so a cached copy of an old version is never
+    # served for a new one. It used to be False, which sounds safer but
+    # actually caused a different, worse problem: every single page
+    # load/refresh had to fetch this file over the network fresh (nothing
+    # was ever allowed to be cached), racing against Lovelace parsing the
+    # dashboard and trying to instantiate <ar-smart-scheduler-card>. Win the
+    # race (fast network, warm server) and the card renders; lose it (slow
+    # network, cold connection, HA busy at startup) and Lovelace gives up
+    # waiting for the custom element to be defined and shows "Configuration
+    # error" instead - intermittently, since it depends on load timing, not
+    # on anything actually being broken. Refreshing again just re-rolls that
+    # same race. Letting the browser cache the (correctly versioned) file
+    # removes the network fetch from that race almost entirely after the
+    # first load.
     try:
         # HA 2024.7+
         from homeassistant.components.http import StaticPathConfig
 
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(FRONTEND_URL_BASE, str(frontend_dir), cache_headers=False)]
+            [StaticPathConfig(FRONTEND_URL_BASE, str(frontend_dir), cache_headers=True)]
         )
     except ImportError:
-        hass.http.register_static_path(FRONTEND_URL_BASE, str(frontend_dir), cache_headers=False)
+        hass.http.register_static_path(FRONTEND_URL_BASE, str(frontend_dir), cache_headers=True)
 
     # The "?v=<version>" query string is a cache-buster: browsers (and the
     # HA Companion App's webview in particular) key their cache on the full
