@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components import websocket_api
@@ -52,6 +54,8 @@ from .const import (
     WEEKDAY_KEYS,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 # Error reasons shared with translations/en.json (config.error / config.abort)
 # so the card can show the same wording the Settings wizard would.
 _ERROR_MESSAGES = {
@@ -80,24 +84,51 @@ def async_register_ws(hass: HomeAssistant) -> None:
     @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list"})
     @callback
     def ws_list(hass: HomeAssistant, connection, msg) -> None:
-        """Return live snapshots of every scheduler (used by the Lovelace card)."""
-        schedulers = hass.data.get(DOMAIN, {})
-        items = []
-        for value in schedulers.values():
-            build = getattr(value, "build_state_snapshot", None)
-            if callable(build):
-                items.append(build())
-        connection.send_result(
-            msg["id"],
-            {
-                "schedulers": items,
-                # Lets the card build its "add schedule" entity picker and
-                # device-type dropdown from the same source of truth the
-                # backend validates against, instead of a hardcoded copy.
-                "domains": SUPPORTED_ENTITY_DOMAINS,
-                "device_types": DEVICE_TYPES,
-            },
-        )
+        """Return live snapshots of every scheduler (used by the Lovelace card).
+
+        This is a plain (non-async_response) @callback handler, so nothing
+        wraps it to convert an unhandled exception into a websocket error
+        reply the way @websocket_api.async_response does for the other
+        commands below. If build_state_snapshot() ever raised for one
+        scheduler, the whole handler used to blow up with no
+        connection.send_result()/send_error() ever called for this message -
+        the card's callWS() promise then never resolves or rejects, and the
+        card (and the Lovelace "Add Card" preview tile, which renders this
+        card live) is stuck on its loading spinner forever with nothing in
+        the browser console to explain why. A broken snapshot for one
+        scheduler now gets logged and skipped instead of taking the whole
+        list down, and any other unexpected failure still gets a real error
+        response instead of silence.
+        """
+        try:
+            schedulers = hass.data.get(DOMAIN, {})
+            items = []
+            for entry_id, value in schedulers.items():
+                build = getattr(value, "build_state_snapshot", None)
+                if not callable(build):
+                    continue
+                try:
+                    items.append(build())
+                except Exception:  # noqa: BLE001 - one bad entry shouldn't hide all the rest
+                    _LOGGER.exception(
+                        "ar_smart_scheduler/list: failed to build state snapshot for entry %s",
+                        entry_id,
+                    )
+
+            connection.send_result(
+                msg["id"],
+                {
+                    "schedulers": items,
+                    # Lets the card build its "add schedule" entity picker and
+                    # device-type dropdown from the same source of truth the
+                    # backend validates against, instead of a hardcoded copy.
+                    "domains": SUPPORTED_ENTITY_DOMAINS,
+                    "device_types": DEVICE_TYPES,
+                },
+            )
+        except Exception:  # noqa: BLE001 - always answer the card, even on a bug here
+            _LOGGER.exception("ar_smart_scheduler/list: failed to build response")
+            connection.send_error(msg["id"], "unknown_error", "Failed to list schedulers - see the HA log")
 
     # Deliberately not @require_admin: clients get their own non-admin HA
     # account for the dashboard and need to be able to run the scheduler

@@ -1,3 +1,50 @@
+# AR Smart Scheduler v1.6.1 — Patch Notes
+
+## Fix: card (and its "Add Card" preview) could get stuck loading forever
+
+Reported as the card sitting on a spinner indefinitely, both after adding it
+to a dashboard and in the Lovelace "Add Card" picker's live preview tile
+(which renders the card for real, with a stub config, to show a thumbnail).
+No error anywhere - not in the browser console, not on the card itself.
+
+**Root cause:** `ar_smart_scheduler/list` (`websocket.py`) is registered as
+a plain `@callback` command, not wrapped in
+`@websocket_api.async_response` like the other commands. That wrapper is
+what normally catches an exception inside a handler and turns it into a
+websocket error reply. Without it, if anything inside `ws_list` raised - for
+example `build_state_snapshot()` failing for one scheduler - the handler
+died with no `connection.send_result()` / `send_error()` ever sent for that
+message. The card's `hass.callWS()` promise for that request then never
+resolves *or* rejects. "No response" isn't a JS error, so nothing shows up
+in the console - the card (and the picker's preview instance of it) is just
+stuck on its loading state permanently, with no diagnostic trail on either
+end. This is very plausibly what's behind "even a fresh Home Assistant does
+this" reports, since it only takes one scheduler (or even zero, depending on
+what else is happening in that handler at the time) hitting an edge case to
+trigger it.
+
+**Fix, two layers:**
+
+- **Backend** (`websocket.py`): `ws_list` now catches exceptions per-entry
+  (one broken scheduler's snapshot is logged and skipped, not fatal to the
+  whole list) and wraps the full handler so it *always* sends a result or an
+  explicit error back to the card - it can no longer die silently.
+- **Frontend** (`ar-smart-scheduler-card.js`): every `hass.callWS()` call the
+  card makes now goes through a 15-second timeout wrapper. If the backend
+  still never replies for any other reason, the card gives up after 15s and
+  shows an actual, readable error (e.g. "Timed out waiting for the backend
+  (ar_smart_scheduler/list). Check Settings → System → Logs...") instead of
+  spinning forever with no way to tell what's wrong.
+
+If you hit this again after updating, the HA log should now show a real
+traceback under `ar_smart_scheduler` - that's the next place to look.
+
+Files in this patch: `custom_components/ar_smart_scheduler/websocket.py`,
+`custom_components/ar_smart_scheduler/frontend/ar-smart-scheduler-card.js`
+(now `v1.6.1`). Restart HA after updating (backend file changed).
+
+---
+
 # AR Smart Scheduler v1.6.0 — Patch Notes
 
 ## Entity picker: grouped by domain (Lights, Climate, Media players, ...)

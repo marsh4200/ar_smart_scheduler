@@ -20,7 +20,7 @@
 // cache, etc.) is visible to the eye instead of silently causing "the fix
 // didn't work" reports - what's actually running is what's shown here,
 // regardless of what version was installed on the backend.
-const CARD_VERSION = "1.6.0";
+const CARD_VERSION = "1.6.1";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
@@ -87,6 +87,16 @@ const ACTION_SPECS = {
 // a re-render. The entity picker (.entinput/.entrow) is wired separately in
 // _wireEntityPickers() since it needs live 'input' filtering, not 'change'.
 const CHANGE_ACTS = new Set(["set-time", "rename", "add-name", "action-select", "add-devtype", "devtype"]);
+
+// If the backend never replies to a websocket call - a bug in the handler
+// that swallows an exception without responding, a stuck/dropped connection,
+// whatever - hass.callWS()'s promise just never resolves or rejects. Nothing
+// in the browser console reports that ("no response" isn't an error), and
+// the card (and Lovelace's "Add Card" preview tile, which renders this card
+// live) sits on its loading state forever with zero clue why. This caps how
+// long any single call is allowed to hang before the card gives up and shows
+// an actual, diagnosable error instead of spinning silently.
+const WS_TIMEOUT_MS = 15000;
 
 // Entity search results are grouped by domain (Lights, Climate, Media
 // Players, ...) so a home with entities across many domains stays scannable
@@ -208,11 +218,37 @@ class ARSmartSchedulerCard extends HTMLElement {
     return tag === "INPUT" && el.type !== "checkbox";
   }
 
+  // Races hass.callWS() against a timeout so a backend that never replies
+  // (see the WS_TIMEOUT_MS comment above) fails loudly instead of hanging
+  // the caller forever.
+  _callWS(msg) {
+    const call = this._hass.callWS(msg);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new Error(
+            `Timed out waiting for the backend (${msg.type}). Check Settings → System → Logs for an ar_smart_scheduler error, and confirm the integration is set up under Settings → Devices & Services.`
+          )
+        );
+      }, WS_TIMEOUT_MS);
+      call.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
+
   async _refresh(silent) {
     if (!this._hass || this._busy) return;
     this._busy = true;
     try {
-      const resp = await this._hass.callWS({ type: "ar_smart_scheduler/list" });
+      const resp = await this._callWS({ type: "ar_smart_scheduler/list" });
       let items = (resp && resp.schedulers) || [];
       if (this._config.entry_id) {
         items = items.filter((s) => s.entry_id === this._config.entry_id);
@@ -239,7 +275,7 @@ class ARSmartSchedulerCard extends HTMLElement {
   async _set(entryId, patch) {
     if (!this._hass) return;
     try {
-      await this._hass.callWS(
+      await this._callWS(
         Object.assign({ type: "ar_smart_scheduler/set_options", entry_id: entryId }, patch)
       );
     } catch (err) {
@@ -251,7 +287,7 @@ class ARSmartSchedulerCard extends HTMLElement {
   async _setGeneral(entryId, patch) {
     if (!this._hass) return;
     try {
-      await this._hass.callWS(
+      await this._callWS(
         Object.assign({ type: "ar_smart_scheduler/set_general", entry_id: entryId }, patch)
       );
     } catch (err) {
@@ -263,7 +299,7 @@ class ARSmartSchedulerCard extends HTMLElement {
   async _setActions(entryId, patch) {
     if (!this._hass) return;
     try {
-      await this._hass.callWS(
+      await this._callWS(
         Object.assign({ type: "ar_smart_scheduler/set_actions", entry_id: entryId }, patch)
       );
     } catch (err) {
@@ -275,7 +311,7 @@ class ARSmartSchedulerCard extends HTMLElement {
   async _deleteScheduler(entryId) {
     if (!this._hass) return;
     try {
-      await this._hass.callWS({ type: "ar_smart_scheduler/delete", entry_id: entryId });
+      await this._callWS({ type: "ar_smart_scheduler/delete", entry_id: entryId });
     } catch (err) {
       console.error("ar-smart-scheduler-card delete failed", err);
     }
@@ -302,7 +338,7 @@ class ARSmartSchedulerCard extends HTMLElement {
     this._render();
 
     try {
-      const resp = await this._hass.callWS({
+      const resp = await this._callWS({
         type: "ar_smart_scheduler/create",
         name,
         target_entity: this._addSelected,
