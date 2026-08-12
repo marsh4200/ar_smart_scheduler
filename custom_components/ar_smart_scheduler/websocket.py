@@ -99,7 +99,16 @@ def async_register_ws(hass: HomeAssistant) -> None:
             },
         )
 
-    @websocket_api.require_admin
+    # Deliberately not @require_admin: clients get their own non-admin HA
+    # account for the dashboard and need to be able to run the scheduler
+    # themselves (this is the whole point of the card-driven UI - see
+    # README's "No admin access needed"). Same for create/delete/
+    # set_general/set_actions below. Anyone who can authenticate a websocket
+    # connection to this HA instance and reach this dashboard can fully
+    # configure schedules and control their target entities - that's the
+    # explicit tradeoff of "no admin access needed" for the client's own
+    # account. Give each client their own regular (non-admin) user rather
+    # than sharing an admin login.
     @websocket_api.websocket_command(
         {
             vol.Required("type"): f"{DOMAIN}/set_options",
@@ -179,7 +188,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
 
         connection.send_result(msg["id"], {"ok": True, "options": opts})
 
-    @websocket_api.require_admin
+    # Not @require_admin - see the note on ws_set_options above.
     @websocket_api.websocket_command(
         # NOTE: websocket_command() requires either a plain dict, or a
         # vol.All(...) whose *first* item is the vol.Schema (it reaches in
@@ -235,7 +244,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
         entry: ConfigEntry = result["result"]
         connection.send_result(msg["id"], {"ok": True, "entry_id": entry.entry_id})
 
-    @websocket_api.require_admin
+    # Not @require_admin - see the note on ws_set_options above.
     @websocket_api.websocket_command(
         {
             vol.Required("type"): f"{DOMAIN}/delete",
@@ -253,7 +262,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
         await hass.config_entries.async_remove(entry.entry_id)
         connection.send_result(msg["id"], {"ok": True})
 
-    @websocket_api.require_admin
+    # Not @require_admin - see the note on ws_set_options above.
     @websocket_api.websocket_command(
         {
             vol.Required("type"): f"{DOMAIN}/set_general",
@@ -300,7 +309,7 @@ def async_register_ws(hass: HomeAssistant) -> None:
 
         connection.send_result(msg["id"], {"ok": True, "name": name, "target_entity": entity_ids})
 
-    @websocket_api.require_admin
+    # Not @require_admin - see the note on ws_set_options above.
     @websocket_api.websocket_command(
         # See the matching note on ws_create above: must be vol.All(...),
         # not a bare vol.Schema(...).

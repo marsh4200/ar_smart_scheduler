@@ -1,3 +1,36 @@
+# AR Smart Scheduler v1.5.2 — Patch Notes
+
+## Clients no longer need an admin account to use the card
+
+`ar_smart_scheduler/set_options`, `create`, `delete`, `set_general`, and
+`set_actions` are no longer `@require_admin`. Previously a client using a
+restricted (non-admin) HA account could view schedules on the card but
+every edit — even the enable toggle — silently failed, because the
+websocket API rejected the call before it reached the handler.
+
+This was already the stated intent (the README has always said "No admin
+access needed"), so this just makes the code match it.
+
+**Tradeoff, so you can decide if it's right for each install:** any HA user
+account that can authenticate a websocket connection and load the dashboard
+can now fully create, edit, and delete schedules — and, by extension,
+control whatever entity a schedule targets (including locks and gates, if
+you've set one up for those). This is no looser than what the card already
+let a non-admin *view*; it just means viewing and editing now require the
+same thing: a logged-in HA user, not an admin one.
+
+**Recommended setup:** give each client their own regular (non-admin) HA
+user for their dashboard, rather than sharing your installer/admin login.
+That was already good practice before this change, but it matters more now
+since that account can reconfigure automations, not just watch them.
+
+If a particular install has a device you don't want a client account to be
+able to touch even via schedule reconfiguration (e.g. a gate lock), keep
+that device out of the entities `ar_smart_scheduler` is allowed to target
+for that client's account, or don't expose the card to that account at all.
+
+---
+
 # AR Smart Scheduler v1.5.1 — Patch Notes
 
 ## Fix: setup crash — `'Schema' object has no attribute 'validators'`

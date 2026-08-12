@@ -149,7 +149,7 @@ opening Settings → Devices & Services:
 
 - 📅 Respects weekdays  
 - ⚡ Instant updates  
-- 👤 No admin access needed to *view*; card edits use your logged-in HA user's normal permissions  
+- 👤 No admin access needed — any logged-in HA user can view *and* edit from the card. Give each client their own regular (non-admin) account rather than sharing your installer login; see [PATCH_NOTES.md](PATCH_NOTES.md) v1.5.2 for the access-control tradeoff.  
 - 🎛️ Clean, fully self-service UI for clients  
 
 ---
