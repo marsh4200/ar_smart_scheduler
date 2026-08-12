@@ -18,6 +18,8 @@ from .const import (
     CONF_LIGHT_START_BRIGHTNESS,
     CONF_LOCK_END_ACTION,
     CONF_LOCK_START_ACTION,
+    CONF_ONOFF_END_ACTION,
+    CONF_ONOFF_START_ACTION,
     CONF_START_DATA,
     CONF_START_SERVICE,
     CONF_TARGET_ENTITY,
@@ -31,7 +33,9 @@ from .const import (
     DEFAULT_CLIMATE_START_ACTION,
     DEFAULT_CLIMATE_START_TEMPERATURE,
     DEFAULT_COVER_END_ACTION,
+    DEFAULT_COVER_END_POSITION,
     DEFAULT_COVER_START_ACTION,
+    DEFAULT_COVER_START_POSITION,
     DEFAULT_DEVICE_TYPE,
     DEFAULT_LIGHT_END_BRIGHTNESS,
     DEFAULT_LIGHT_START_BRIGHTNESS,
@@ -41,6 +45,7 @@ from .const import (
     DEFAULT_WATER_HEATER_START_TEMPERATURE,
     LOCK_ACTION_TO_SERVICE,
     ONOFF_ACTION_TO_SERVICE,
+    SUPPORTED_ENTITY_DOMAINS,
 )
 
 
@@ -129,4 +134,68 @@ def build_runtime_action_updates(options: dict, data: dict) -> dict:
         CONF_END_SERVICE: ONOFF_ACTION_TO_SERVICE["off"],
         CONF_START_DATA: {},
         CONF_END_DATA: {},
+    }
+
+
+def has_unsupported_entities(entity_ids) -> bool:
+    for entity_id in normalize_entity_ids(entity_ids):
+        domain = entity_id.split(".", 1)[0]
+        if domain not in SUPPORTED_ENTITY_DOMAINS:
+            return True
+    return False
+
+
+def action_snapshot(options: dict, data: dict) -> dict:
+    """Raw (unresolved) per-device action config, for the card to display and edit.
+
+    Unlike build_runtime_action_updates() this does not resolve to HA
+    service calls - it returns the human-facing action/position/brightness/
+    temperature choices the config flow's "Actions" step collects, so the
+    Lovelace card can render matching controls without a round trip through
+    the options flow.
+    """
+    device_type = detect_device_type(options, data)
+
+    if device_type == "cover":
+        return {
+            "device_type": device_type,
+            "start_action": options.get(CONF_COVER_START_ACTION, DEFAULT_COVER_START_ACTION),
+            "start_position": int(options.get(CONF_COVER_START_POSITION, DEFAULT_COVER_START_POSITION)),
+            "end_action": options.get(CONF_COVER_END_ACTION, DEFAULT_COVER_END_ACTION),
+            "end_position": int(options.get(CONF_COVER_END_POSITION, DEFAULT_COVER_END_POSITION)),
+        }
+    if device_type == "light":
+        return {
+            "device_type": device_type,
+            "start_action": options.get(CONF_LIGHT_START_ACTION, "brightness"),
+            "start_brightness": int(options.get(CONF_LIGHT_START_BRIGHTNESS, DEFAULT_LIGHT_START_BRIGHTNESS)),
+            "end_action": options.get(CONF_LIGHT_END_ACTION, "off"),
+            "end_brightness": int(options.get(CONF_LIGHT_END_BRIGHTNESS, DEFAULT_LIGHT_END_BRIGHTNESS)),
+        }
+    if device_type == "climate":
+        return {
+            "device_type": device_type,
+            "start_action": options.get(CONF_CLIMATE_START_ACTION, DEFAULT_CLIMATE_START_ACTION),
+            "start_temperature": int(options.get(CONF_CLIMATE_START_TEMPERATURE, DEFAULT_CLIMATE_START_TEMPERATURE)),
+            "end_action": options.get(CONF_CLIMATE_END_ACTION, DEFAULT_CLIMATE_END_ACTION),
+            "end_temperature": int(options.get(CONF_CLIMATE_END_TEMPERATURE, DEFAULT_CLIMATE_END_TEMPERATURE)),
+        }
+    if device_type == "water_heater":
+        return {
+            "device_type": device_type,
+            "start_action": options.get(CONF_WATER_HEATER_START_ACTION, DEFAULT_WATER_HEATER_START_ACTION),
+            "start_temperature": int(options.get(CONF_WATER_HEATER_START_TEMPERATURE, DEFAULT_WATER_HEATER_START_TEMPERATURE)),
+            "end_action": options.get(CONF_WATER_HEATER_END_ACTION, DEFAULT_WATER_HEATER_END_ACTION),
+            "end_temperature": int(options.get(CONF_WATER_HEATER_END_TEMPERATURE, DEFAULT_WATER_HEATER_END_TEMPERATURE)),
+        }
+    if device_type == "lock":
+        return {
+            "device_type": device_type,
+            "start_action": options.get(CONF_LOCK_START_ACTION, "unlock"),
+            "end_action": options.get(CONF_LOCK_END_ACTION, "lock"),
+        }
+    return {
+        "device_type": device_type,
+        "start_action": options.get(CONF_ONOFF_START_ACTION, "on"),
+        "end_action": options.get(CONF_ONOFF_END_ACTION, "off"),
     }

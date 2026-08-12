@@ -25,6 +25,14 @@ Perfect for lights, pumps, gates, garage doors, irrigation, and more.
 
 ⚡ Simple for clients. Powerful for installers.
 
+> **📌 Merged repo:** the Lovelace card that used to live in the separate
+> [`ar-scheduler-card`](https://github.com/marsh4200/ar-scheduler-card) repo
+> is now built into this integration (see `custom_components/ar_smart_scheduler/frontend/`)
+> and is fully configurable on its own — no more Settings → Devices &
+> Services required to add, edit, or remove a schedule. See
+> [PATCH_NOTES.md](PATCH_NOTES.md) for details and what to do with the old
+> card repo.
+
 ---
 
 ## ✨ Features
@@ -106,16 +114,34 @@ state_color: true
 
 ---
 
-### 🚀 AR Scheduler Card (Recommended)
+### 🚀 AR Smart Scheduler Card (Recommended — bundled, no install step)
 
-Repo:
-https://github.com/marsh4200/ar-scheduler-card
+This card ships inside the integration and registers itself automatically —
+no HACS frontend entry, no `resources:` config. Just add it to a dashboard:
 
 ```yaml
-type: custom:ar-scheduler-card
-entity: switch.gaming_lights_schedule_enabled
-name: 🎮 Gaming Room Lights
+type: custom:ar-smart-scheduler-card
+title: Schedules            # optional
+entry_id: <entry id>        # optional — show a single scheduler only
 ```
+
+Everything is configurable straight from the card, so a client can set up
+their own automations ("turn the pool pump off at sunset") without ever
+opening Settings → Devices & Services:
+
+- ➕ **Add schedule** — name it, pick the entities it controls (search box,
+  any supported domain), choose start/end triggers, and create it on the
+  spot.
+- 🌅 **Tap-to-cycle triggers** — flip Start/End between time / sunrise /
+  sunset, with ±5 min offset steppers for solar triggers.
+- 📅 **Weekday chips**, 🔘 **enable toggle**, and an optional **second daily
+  window**.
+- ✏️ **Rename** a schedule inline, and add/remove target entities from a
+  chip list.
+- 🎛️ **Actions** — what happens at start/end (on/off, brightness, cover
+  position, climate mode/temperature, water heater mode/temperature, lock
+  state), matched to whatever the "Applies to" device profile is.
+- 🗑️ **Remove** a schedule entirely, with a tap-to-confirm.
 
 ---
 
@@ -123,8 +149,8 @@ name: 🎮 Gaming Room Lights
 
 - 📅 Respects weekdays  
 - ⚡ Instant updates  
-- 👤 No admin access needed  
-- 🎛️ Clean UI for clients  
+- 👤 No admin access needed to *view*; card edits use your logged-in HA user's normal permissions  
+- 🎛️ Clean, fully self-service UI for clients  
 
 ---
 

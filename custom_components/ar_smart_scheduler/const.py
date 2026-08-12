@@ -13,6 +13,22 @@ DEVICE_TYPES = ["auto", "cover", "onoff", "light", "climate", "water_heater", "l
 DEFAULT_DEVICE_TYPE = "auto"
 CONF_DEVICE_TYPE = "device_type"
 
+# Entity domains a scheduler is allowed to target. Shared by the config flow
+# (form validation) and the websocket API (card-driven create/edit), so the
+# card's own entity picker and the backend never disagree about what's
+# selectable.
+SUPPORTED_ENTITY_DOMAINS = [
+    "cover",
+    "switch",
+    "light",
+    "climate",
+    "media_player",
+    "fan",
+    "water_heater",
+    "lock",
+    "input_boolean",
+]
+
 # Trigger types (schedule profiles)
 TRIGGER_TYPES = ["time", "sunrise", "sunset"]
 TRIGGER_TIME = "time"

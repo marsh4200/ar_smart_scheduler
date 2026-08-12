@@ -91,22 +91,11 @@ from .const import (
     LOCK_ACTION_TO_SERVICE,
     ONOFF_ACTIONS,
     ONOFF_ACTION_TO_SERVICE,
+    SUPPORTED_ENTITY_DOMAINS,
     TRIGGER_TYPES,
     WATER_HEATER_ACTIONS,
     WEEKDAY_KEYS,
 )
-
-SUPPORTED_ENTITY_DOMAINS = [
-    "cover",
-    "switch",
-    "light",
-    "climate",
-    "media_player",
-    "fan",
-    "water_heater",
-    "lock",
-    "input_boolean",
-]
 
 
 def _normalize_entity_ids(entity_ids) -> list[str]:
@@ -611,62 +600,98 @@ def _normalize_time_input(value) -> str:
     return value_str or "00:00:00"
 
 
+# -------------------------------------------------------------------------
+# Module-level step helpers.
+#
+# These used to be methods on _BaseSchedulerFlow, but none of them (besides
+# _is_duplicate_entry, which needs `hass`) actually touch flow instance
+# state - they are pure functions of their arguments. Pulling them out lets
+# websocket.py reuse the exact same validation/defaulting logic when the
+# Lovelace card creates or edits a scheduler directly, instead of the
+# Settings -> Devices & Services wizard, without duplicating it.
+# -------------------------------------------------------------------------
+
+
+def _prepare_general(user_input: dict) -> tuple[str, list[str], str, dict]:
+    name = str(user_input[CONF_NAME]).strip() or "Scheduler"
+    entity_ids = _normalize_entity_ids(user_input[CONF_TARGET_ENTITY])
+    requested_type = user_input.get(CONF_DEVICE_TYPE, "auto")
+    device_type = _detect_type(entity_ids) if requested_type == "auto" else requested_type
+
+    general_options = {
+        CONF_DEVICE_TYPE: requested_type,
+        CONF_ENABLED: bool(user_input.get(CONF_ENABLED, True)),
+    }
+    return name, entity_ids, device_type, general_options
+
+
+def _prepare_schedule(user_input: dict) -> dict:
+    return {
+        CONF_WEEKDAYS: user_input.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS),
+        CONF_START_TRIGGER: user_input.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER),
+        CONF_END_TRIGGER: user_input.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER),
+    }
+
+
+def _prepare_schedule_details(user_input: dict, current: dict | None = None) -> dict:
+    current = current or {}
+    return {
+        CONF_START: _normalize_time_input(user_input.get(CONF_START, current.get(CONF_START, DEFAULT_START))),
+        CONF_END: _normalize_time_input(user_input.get(CONF_END, current.get(CONF_END, DEFAULT_END))),
+        CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, current.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))),
+        CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, current.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))),
+    }
+
+
+def _prepare_second_window(user_input: dict) -> dict:
+    return {
+        CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
+        CONF_SECOND_START_TRIGGER: user_input.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER),
+        CONF_SECOND_END_TRIGGER: user_input.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER),
+    }
+
+
+def _prepare_second_window_details(user_input: dict, current: dict | None = None) -> dict:
+    current = current or {}
+    return {
+        CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
+        CONF_SECOND_START: _normalize_time_input(user_input.get(CONF_SECOND_START, current.get(CONF_SECOND_START, DEFAULT_SECOND_START))),
+        CONF_SECOND_END: _normalize_time_input(user_input.get(CONF_SECOND_END, current.get(CONF_SECOND_END, DEFAULT_SECOND_END))),
+        CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, current.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET))),
+        CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, current.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET))),
+    }
+
+
+def _is_duplicate_entry(hass, name: str, entity_ids: list[str], current_entry_id: str | None = None) -> bool:
+    key = (name.casefold(), tuple(entity_ids))
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if current_entry_id is not None and entry.entry_id == current_entry_id:
+            continue
+        other_name = str(entry.data.get(CONF_NAME, entry.title or "")).strip()
+        other_entities = _normalize_entity_ids(entry.data.get(CONF_TARGET_ENTITY))
+        if (other_name.casefold(), tuple(other_entities)) == key:
+            return True
+    return False
+
+
 class _BaseSchedulerFlow:
     def _prepare_general(self, user_input: dict) -> tuple[str, list[str], str, dict]:
-        name = str(user_input[CONF_NAME]).strip() or "Scheduler"
-        entity_ids = _normalize_entity_ids(user_input[CONF_TARGET_ENTITY])
-        requested_type = user_input.get(CONF_DEVICE_TYPE, "auto")
-        device_type = _detect_type(entity_ids) if requested_type == "auto" else requested_type
-
-        general_options = {
-            CONF_DEVICE_TYPE: requested_type,
-            CONF_ENABLED: bool(user_input.get(CONF_ENABLED, True)),
-        }
-        return name, entity_ids, device_type, general_options
+        return _prepare_general(user_input)
 
     def _prepare_schedule(self, user_input: dict) -> dict:
-        return {
-            CONF_WEEKDAYS: user_input.get(CONF_WEEKDAYS, DEFAULT_WEEKDAYS),
-            CONF_START_TRIGGER: user_input.get(CONF_START_TRIGGER, DEFAULT_START_TRIGGER),
-            CONF_END_TRIGGER: user_input.get(CONF_END_TRIGGER, DEFAULT_END_TRIGGER),
-        }
+        return _prepare_schedule(user_input)
 
     def _prepare_schedule_details(self, user_input: dict, current: dict | None = None) -> dict:
-        current = current or {}
-        return {
-            CONF_START: _normalize_time_input(user_input.get(CONF_START, current.get(CONF_START, DEFAULT_START))),
-            CONF_END: _normalize_time_input(user_input.get(CONF_END, current.get(CONF_END, DEFAULT_END))),
-            CONF_START_OFFSET: int(user_input.get(CONF_START_OFFSET, current.get(CONF_START_OFFSET, DEFAULT_START_OFFSET))),
-            CONF_END_OFFSET: int(user_input.get(CONF_END_OFFSET, current.get(CONF_END_OFFSET, DEFAULT_END_OFFSET))),
-        }
+        return _prepare_schedule_details(user_input, current)
 
     def _prepare_second_window(self, user_input: dict) -> dict:
-        return {
-            CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
-            CONF_SECOND_START_TRIGGER: user_input.get(CONF_SECOND_START_TRIGGER, DEFAULT_SECOND_START_TRIGGER),
-            CONF_SECOND_END_TRIGGER: user_input.get(CONF_SECOND_END_TRIGGER, DEFAULT_SECOND_END_TRIGGER),
-        }
+        return _prepare_second_window(user_input)
 
     def _prepare_second_window_details(self, user_input: dict, current: dict | None = None) -> dict:
-        current = current or {}
-        return {
-            CONF_SECOND_ENABLED: bool(user_input.get(CONF_SECOND_ENABLED, DEFAULT_SECOND_ENABLED)),
-            CONF_SECOND_START: _normalize_time_input(user_input.get(CONF_SECOND_START, current.get(CONF_SECOND_START, DEFAULT_SECOND_START))),
-            CONF_SECOND_END: _normalize_time_input(user_input.get(CONF_SECOND_END, current.get(CONF_SECOND_END, DEFAULT_SECOND_END))),
-            CONF_SECOND_START_OFFSET: int(user_input.get(CONF_SECOND_START_OFFSET, current.get(CONF_SECOND_START_OFFSET, DEFAULT_SECOND_START_OFFSET))),
-            CONF_SECOND_END_OFFSET: int(user_input.get(CONF_SECOND_END_OFFSET, current.get(CONF_SECOND_END_OFFSET, DEFAULT_SECOND_END_OFFSET))),
-        }
+        return _prepare_second_window_details(user_input, current)
 
     def _is_duplicate(self, name: str, entity_ids: list[str], current_entry_id: str | None = None) -> bool:
-        key = (name.casefold(), tuple(entity_ids))
-        for entry in self.hass.config_entries.async_entries(DOMAIN):
-            if current_entry_id is not None and entry.entry_id == current_entry_id:
-                continue
-            other_name = str(entry.data.get(CONF_NAME, entry.title or "")).strip()
-            other_entities = _normalize_entity_ids(entry.data.get(CONF_TARGET_ENTITY))
-            if (other_name.casefold(), tuple(other_entities)) == key:
-                return True
-        return False
+        return _is_duplicate_entry(self.hass, name, entity_ids, current_entry_id)
 
 
 class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, domain=DOMAIN):
@@ -762,6 +787,42 @@ class ARSmartSchedulerConfigFlow(_BaseSchedulerFlow, config_entries.ConfigFlow, 
         return self.async_show_form(
             step_id="actions",
             data_schema=_build_action_schema(self._device_type),
+        )
+
+    async def async_step_card(self, user_input=None):
+        """Create a scheduler directly from the Lovelace card.
+
+        Bypasses the multi-step wizard so the card's own "Add schedule"
+        panel can create a fully-working scheduler (name + entities +
+        device type + basic schedule) in one round trip, defaulting
+        everything the quick-add form doesn't ask for. Triggered by
+        websocket.py via hass.config_entries.flow.async_init(..., context=
+        {"source": "card"}, data=...) - never shown to the user as a form.
+        """
+        user_input = user_input or {}
+        name, entity_ids, device_type, general_options = self._prepare_general(user_input)
+
+        if not entity_ids:
+            return self.async_abort(reason="required")
+        if _has_unsupported_entities(entity_ids):
+            return self.async_abort(reason="unsupported_domain")
+        if self._is_duplicate(name, entity_ids):
+            return self.async_abort(reason="already_configured")
+
+        opts = dict(general_options)
+        opts.update(self._prepare_schedule(user_input))
+        opts.update(self._prepare_schedule_details(user_input, opts))
+        opts.update(self._prepare_second_window(user_input))
+        opts.update(self._prepare_second_window_details(user_input, opts))
+        opts.update(_resolve_action_options(device_type, user_input))
+
+        return self.async_create_entry(
+            title=name or "Scheduler",
+            data={
+                CONF_NAME: name,
+                CONF_TARGET_ENTITY: entity_ids,
+            },
+            options=opts,
         )
 
     @staticmethod

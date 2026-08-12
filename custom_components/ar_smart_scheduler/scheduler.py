@@ -16,6 +16,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_DEVICE_TYPE,
     CONF_ENABLED,
     CONF_END,
     CONF_END_DATA,
@@ -67,6 +68,7 @@ from .const import (
     WEEKDAY_KEYS,
     WEEKDAY_MAP,
 )
+from .runtime_actions import action_snapshot, detect_device_type
 
 
 def _parse_time(value: str | None, fallback: str) -> dt.time:
@@ -203,6 +205,9 @@ class ARScheduler:
             "name": self.entry.data.get("name", self.entry.title),
             "enabled": self.state.enabled,
             "targets": list(self.targets),
+            "device_type": detect_device_type(self.entry.options, self.entry.data),
+            "device_type_setting": self.entry.options.get(CONF_DEVICE_TYPE, "auto"),
+            "actions": action_snapshot(self.entry.options, self.entry.data),
             "weekdays": [WEEKDAY_KEYS[index] for index in sorted(self.state.weekdays)],
             "start_time": self.state.start.strftime("%H:%M:%S"),
             "end_time": self.state.end.strftime("%H:%M:%S"),
