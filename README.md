@@ -1,159 +1,149 @@
-# AR Smart Scheduler
+# Scanner
 
-## 🙌 Credits  
-**Developed by A R Smart Home Automation**
+A play grocery shop for kids. Scan the items, watch them drop onto the list, pay at the
+till with notes and coins, and work out the change.
 
-[![GitHub release](https://img.shields.io/github/v/release/marsh4200/ar_smart_scheduler.svg)](https://github.com/marsh4200/ar_smart_scheduler/releases)  
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/marsh4200/ar_smart_scheduler)  
-[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](
-https://my.home-assistant.io/redirect/hacs_repository/?owner=marsh4200&repository=ar_smart_scheduler&category=integration
-)
+Runs on any Ubuntu server on the LAN, opens in any browser, and works well on a tablet.
 
----
+## Install
 
-## 🚀 Overview
-
-A Home Assistant custom integration that lets you schedule any entity with:
-
-- ⏰ Start & End times (time-based scheduling)  
-- 🌅 Sunrise & Sunset triggers with adjustable offsets  
-- 🔁 Dual daily schedules (run twice per day — morning & evening)  
-- 📅 Selectable weekdays  
-- 🔘 Enable / Disable toggle  
-
-Perfect for lights, pumps, gates, garage doors, irrigation, and more.
-
-⚡ Simple for clients. Powerful for installers.
-
-> **📌 Merged repo:** the Lovelace card that used to live in the separate
-> [`ar-scheduler-card`](https://github.com/marsh4200/ar-scheduler-card) repo
-> is now built into this integration (see `custom_components/ar_smart_scheduler/frontend/`)
-> and is fully configurable on its own — no more Settings → Devices &
-> Services required to add, edit, or remove a schedule. See
-> [PATCH_NOTES.md](PATCH_NOTES.md) for details and what to do with the old
-> card repo.
-
----
-
-## ✨ Features
-
-- ⏰ Start & End time control  
-- 🌅 Sunrise & Sunset with offsets (± minutes)  
-- 🔁 Dual schedule windows  
-- 📅 Weekday selection  
-- 🔘 Enable / Disable per schedule  
-
-- 🧠 Intelligent trigger system (time OR solar)  
-- ⏱️ Offset control (before/after sun events)  
-- 🔁 Auto re-scheduling with sun updates  
-
-- 🧩 Works with any domain  
-- 🎛️ Device-aware actions  
-- ⚙️ Auto device detection  
-
-- 📊 Live status:
-  - Next run  
-  - Last run  
-  - Active window  
-
-- 🖥️ Lovelace friendly  
-- 🛠️ Installer focused  
-- ⚡ Real-time updates  
-
----
-
-## 📦 Installation (HACS)
-
-1. Open HACS  
-2. Go to Integrations  
-3. Add Custom Repository  
-4. Paste:
-   https://github.com/marsh4200/ar_smart_scheduler  
-5. Category: Integration  
-6. Install & Restart  
-
----
-
-## 🧰 Manual Installation
-
-Copy:
-custom_components/ar_smart_scheduler
-
-To:
-config/custom_components/ar_smart_scheduler
-
-Restart Home Assistant.
-
----
-
-## 🖥️ Lovelace Example
-
-### 🔹 Default Entities Card
-
-```yaml
-type: entities
-title: 🎮 Gaming Room Lights
-entities:
-  - entity: switch.gaming_lights_schedule_enabled
-    name: Enable Schedule
-  - entity: time.gaming_lights_start_time
-    name: Start Time
-  - entity: time.gaming_lights_end_time
-    name: End Time
-  - type: section
-    label: Days
-  - entity: switch.gaming_lights_mon
-  - entity: switch.gaming_lights_tue
-  - entity: switch.gaming_lights_wed
-  - entity: switch.gaming_lights_thu
-  - entity: switch.gaming_lights_fri
-  - entity: switch.gaming_lights_sat
-  - entity: switch.gaming_lights_sun
-state_color: true
+```bash
+curl -sL https://raw.githubusercontent.com/marsh4200/scanner/main/install.sh | sudo bash
 ```
 
----
+Then open `http://<server-ip>:3010`.
 
-### 🚀 AR Smart Scheduler Card (Recommended — bundled, no install step)
+| | |
+|---|---|
+| Sign in | **admin** / **scanner** |
+| Grown-up PIN | **1234** |
 
-This card ships inside the integration and registers itself automatically —
-no HACS frontend entry, no `resources:` config. Just add it to a dashboard:
+Change both under ⚙️ → Shop setup, first thing.
 
-```yaml
-type: custom:ar-smart-scheduler-card
-title: Schedules            # optional
-entry_id: <entry id>        # optional — show a single scheduler only
+## Camera scanning
+
+Browsers only hand the camera to a page on a **secure origin** — `https://` or `localhost`.
+A tablet on `http://192.168.x.x:3010` is neither, which is why the camera button used to
+dead-end. So the server also listens on HTTPS, on port **3011**, with a certificate it
+generates itself on first boot:
+
+```
+https://<server-ip>:3011
 ```
 
-Everything is configurable straight from the card, so a client can set up
-their own automations ("turn the pool pump off at sunset") without ever
-opening Settings → Devices & Services:
+The browser warns once that it does not know who issued the certificate — tap **Advanced**,
+then **Continue**. It is your own server on your own network, so that is expected. Bookmark
+that address on the tablet and the camera keeps working.
 
-- ➕ **Add schedule** — name it, pick the entities it controls (search box,
-  any supported domain), choose start/end triggers, and create it on the
-  spot.
-- 🌅 **Tap-to-cycle triggers** — flip Start/End between time / sunrise /
-  sunset, with ±5 min offset steppers for solar triggers.
-- 📅 **Weekday chips**, 🔘 **enable toggle**, and an optional **second daily
-  window**.
-- ✏️ **Rename** a schedule inline, and add/remove target entities from a
-  chip list.
-- 🎛️ **Actions** — what happens at start/end (on/off, brightness, cover
-  position, climate mode/temperature, water heater mode/temperature, lock
-  state), matched to whatever the "Applies to" device profile is.
-- 🗑️ **Remove** a schedule entirely, with a tap-to-confirm.
+Nicer still, if the shop is already behind a Cloudflare tunnel it gets a real certificate and
+the camera just works with no warning at all.
 
----
+Scanning uses Chrome's built-in barcode reader where it exists, and falls back to a bundled
+decoder everywhere else, so iPad Safari and Firefox work too. EAN-13, EAN-8, UPC-A, UPC-E,
+Code 128, Code 39, ITF, Codabar and QR. The camera stays open while you scan, so a whole
+trolley goes on the list in one go.
 
-## 🧠 Notes
+A USB barcode scanner needs none of this and works on any address.
 
-- 📅 Respects weekdays  
-- ⚡ Instant updates  
-- 👤 No admin access needed — any logged-in HA user can view *and* edit from the card. Give each client their own regular (non-admin) account rather than sharing your installer login; see [PATCH_NOTES.md](PATCH_NOTES.md) v1.5.2 for the access-control tradeoff.  
-- 🎛️ Clean, fully self-service UI for clients  
+## Online shop
 
----
+A little side app, running on the same server and the same data, on its own port:
 
-## 🔥 In short
+```
+http://<server-ip>:3012
+```
 
-**AR Smart Scheduler makes scheduling simple, powerful, and client-friendly.**
+Whoever opens it signs in the same way as the till, browses whatever is currently on the
+shelves (anything switched off there disappears here too), builds a basket and sends it in —
+nothing is paid for yet. That order lands under the 🛍️ button at the till, badge and all.
+Tap **Load** to drop it straight onto the scanner's list, add anything extra, then **Pay now**
+as normal — cash or card. The order tracks itself back on the shopper's screen: waiting,
+being packed, then paid.
+
+Switch it off under ⚙️ → Shop setup if you only want the till.
+
+## Updating
+
+⚙️ → Updates → **Update now**. It pulls from GitHub, rebuilds, and restarts the service.
+If something breaks, **Go back to previous version** restores the last working commit.
+
+## How the kids use it
+
+| | |
+|---|---|
+| **Scan a barcode** | The item pops up in the scanner window and drops onto the list, with a beep and a laser sweep |
+| **The list** | Everything scanned so far, newest first, with minus and plus to change quantities |
+| Camera button | Uses the phone or tablet camera instead of a USB scanner — stays open so you can scan item after item |
+| **Start again** | Empties the list |
+| **Pay now** | Hand over notes and coins until the amount is covered |
+| **How much change?** | Three answers to pick from — the score is kept for you |
+
+Nothing reaches the list except by scanning. If a grown-up would rather the kids could
+also tap pictures, switch it on under Shop setup and a shop button appears in the top bar.
+
+## Who can get in
+
+Two separate doors:
+
+- **Sign in** — a username and password, needed before the shop loads at all. Tick *keep me signed in*
+  on the till tablet and it stays signed in for 60 days
+- **Grown-up PIN** — a second door in front of ⚙️, so a signed-in tablet left on the counter cannot
+  wander into the settings
+
+Eight wrong tries locks that device out for five minutes. Passwords are stored as scrypt hashes and
+are left out of backups.
+
+## Bank cards
+
+Give each child a card with a barcode — an old loyalty card, a printed label, anything that scans.
+
+- Make the card under ⚙️ → Cards, and capture its barcode by scanning it rather than typing
+- Load money on from the same place; this sits behind the grown-up PIN so pocket money stays finite
+- At the till, scanning a card shows its balance. With shopping in the basket, pay right there
+- Or at checkout, switch to the Card tab and scan the card. If it will not scan, type its number,
+  use the camera, or tap **Choose a card** to pick from the list
+- If the money is short the shop says how much by, and that it needs reloading first
+- Balances can never go below zero, even if the scanner fires the same card twice
+
+Switch the whole thing off under ⚙️ → Shop setup if you want a cash-only shop.
+
+## Grown-up area (⚙️)
+
+- **Items** — add, edit, hide or delete groceries; set price, shelf, barcode; upload a photo or pick an emoji
+- **Cards** — make bank cards, load money, view history, switch one off
+- **Shop setup** — shop name, money symbol, price display, tap-the-shelves mode, change quiz, sounds, sign-in details, PIN, backup/restore
+- **Sales** — what has been sold, favourite items, change-quiz score
+- **Updates** — check, update, roll back, and read the log
+
+## Adding real items
+
+Give an item a barcode and the kids can scan the actual packet from your kitchen.
+Easiest way: open the item, click into the barcode box, and scan — the scanner types
+the digits for you.
+
+## Server layout
+
+| | |
+|---|---|
+| Source | `/opt/scanner-src` |
+| App | `/opt/scanner` |
+| Data | `/opt/scanner/data` (SQLite + photos) |
+| Service | `scanner` |
+| Ports | `3010` http, `3011` https, `3012` online shop (override with `APP_PORT=…` / `ONLINE_PORT=…` on install) |
+| Certificate | `/opt/scanner/data/certs` — delete it and restart to reissue |
+| Update by SSH | `sudo scanner-update` (add `--force` to rebuild regardless) |
+| Roll back | `sudo scanner-rollback` |
+
+```bash
+systemctl status scanner
+journalctl -u scanner -f
+```
+
+## Development
+
+```bash
+cd server && npm install && npm start     # API on :3010 (and :3012 for the online shop)
+cd client && npm install && npm run dev   # Vite on :5173, proxies to the API
+```
+
+The till is at `http://localhost:5173/`, the online shop at `http://localhost:5173/shop.html`.
