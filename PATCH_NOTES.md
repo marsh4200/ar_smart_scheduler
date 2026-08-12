@@ -1,3 +1,27 @@
+# AR Smart Scheduler v1.6.2 — Patch Notes
+
+## Entity picker: only show the name you gave it in Home Assistant
+
+The "+ add entity" dropdown showed two lines per entity: the friendly name
+you set, and underneath it the raw entity id (e.g.
+`light.0x0000000012345678_l1_light` - common with Zigbee/MQTT-style
+integrations that generate ids from a device's hardware address). That
+second line was noise at best, and for anyone naming things themselves in
+Home Assistant it read as an ugly, technical name that has nothing to do
+with what they actually called the entity.
+
+**Fix:** the picker now shows only the friendly name - whatever you renamed
+the entity to in Home Assistant. The raw entity id is still used internally
+to know which entity was picked when you tap a row; it's just no longer
+printed on screen. Search still matches against both the friendly name and
+the raw id, so typing a technical id still works if you happen to know it -
+it just won't be shown back to you.
+
+Frontend-only change (`ar-smart-scheduler-card.js`, now v1.6.2). No backend
+changes, no restart needed - hard-refresh the browser to pick it up.
+
+---
+
 # AR Smart Scheduler v1.6.1 — Patch Notes
 
 ## Fix: card (and its "Add Card" preview) could get stuck loading forever

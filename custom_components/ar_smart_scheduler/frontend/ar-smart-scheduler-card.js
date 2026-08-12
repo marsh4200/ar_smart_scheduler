@@ -20,7 +20,7 @@
 // cache, etc.) is visible to the eye instead of silently causing "the fix
 // didn't work" reports - what's actually running is what's shown here,
 // regardless of what version was installed on the backend.
-const CARD_VERSION = "1.6.1";
+const CARD_VERSION = "1.6.2";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
@@ -457,7 +457,6 @@ class ARSmartSchedulerCard extends HTMLElement {
             (id) => `
         <button type="button" class="entrow" data-form="${this._esc(formId)}" data-ent="${this._esc(id)}">
           <span class="entname">${this._esc(this._entityLabel(id))}</span>
-          <span class="entid">${this._esc(id)}</span>
         </button>`
           )
           .join("");
@@ -857,11 +856,10 @@ class ARSmartSchedulerCard extends HTMLElement {
         .entgroup:not(:last-child) { border-bottom: 1px solid var(--divider-color); }
         .entgroup-header { position: sticky; top: 0; z-index: 1; display:flex; align-items:center; justify-content:space-between; gap:6px; padding: 6px 12px; background: var(--card-background-color); color: var(--secondary-text-color); font-size: 0.72em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
         .entgroup-count { color: var(--secondary-text-color); font-size: 0.95em; font-weight: 400; text-transform: none; letter-spacing: normal; opacity: 0.7; }
-        .entrow { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; box-sizing:border-box; padding: 11px 12px; background:transparent; border:none; border-bottom:1px solid var(--divider-color); text-align:left; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color: rgba(0,0,0,0.15); }
+        .entrow { display:flex; align-items:center; width:100%; box-sizing:border-box; padding: 11px 12px; background:transparent; border:none; border-bottom:1px solid var(--divider-color); text-align:left; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color: rgba(0,0,0,0.15); }
         .entgroup .entrow:last-child { border-bottom:none; }
         .entrow:hover, .entrow:active { background: var(--card-background-color); }
         .entname { color: var(--primary-text-color); font-size: 0.95em; }
-        .entid { color: var(--secondary-text-color); font-size: 0.78em; }
         .entempty, .entmore { padding: 10px 12px; color: var(--secondary-text-color); font-size: 0.85em; }
         .offset { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top: 6px; }
         .offset button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); cursor:pointer; font-size: 1.1em; flex: none; }
