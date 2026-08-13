@@ -20,7 +20,7 @@
 // cache, etc.) is visible to the eye instead of silently causing "the fix
 // didn't work" reports - what's actually running is what's shown here,
 // regardless of what version was installed on the backend.
-const CARD_VERSION = "1.6.3";
+const CARD_VERSION = "1.6.4";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
