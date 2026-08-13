@@ -68,19 +68,38 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> bo
     their resources in configuration.yaml, which isn't ours to edit, so this
     returns False there and the caller falls back to add_extra_js_url -
     weaker, but better than nothing for that setup.
+
+    Everything below is wrapped in one broad try/except on purpose: this
+    reaches into hass.data["lovelace"], which is a private implementation
+    detail of HA core, not a public API, and it has in fact changed shape
+    across HA versions - older cores store a plain dict there
+    ({"resources": ..., ...}); newer cores store a `LovelaceData` dataclass
+    (lovelace_data.resources) instead, which broke the dict-only version of
+    this function outright: `.get("resources")` on a dataclass raises
+    AttributeError, and because that happened before any try/except, it took
+    the add_extra_js_url() fallback down with it - so the card failed to
+    register at all, on either path, instead of falling back to the older
+    (merely race-prone) behavior. Whatever HA does with this next, a failure
+    anywhere in here must degrade to "fall back to add_extra_js_url", never
+    to "the card never loads by any mechanism".
     """
-    lovelace_data = hass.data.get("lovelace")
-    if not lovelace_data:
-        return False
-
-    resources = lovelace_data.get("resources")
-    if resources is None or not hasattr(resources, "async_create_item"):
-        # ResourceYAMLCollection (YAML-mode dashboards) has no create/update
-        # API - nothing we can do here short of editing the user's YAML.
-        return False
-
     try:
-        if not resources.loaded:
+        lovelace_data = hass.data.get("lovelace")
+        if not lovelace_data:
+            return False
+
+        if isinstance(lovelace_data, dict):
+            resources = lovelace_data.get("resources")
+        else:
+            resources = getattr(lovelace_data, "resources", None)
+
+        if resources is None or not hasattr(resources, "async_create_item"):
+            # ResourceYAMLCollection (YAML-mode dashboards) has no
+            # create/update API - nothing we can do here short of editing
+            # the user's YAML.
+            return False
+
+        if not getattr(resources, "loaded", True):
             await resources.async_load()
             resources.loaded = True
 
@@ -102,7 +121,8 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> bo
                 await resources.async_update_item(existing["id"], {"url": url})
         else:
             await resources.async_create_item({"res_type": "module", "url": url})
-    except Exception:  # noqa: BLE001 - never block startup over this
+    except Exception:  # noqa: BLE001 - never block startup, and never take
+        # add_extra_js_url's fallback down with it - see docstring above.
         _LOGGER.exception(
             "Could not auto-register the AR Smart Scheduler card as a Lovelace "
             "resource; falling back to add_extra_js_url"
@@ -168,7 +188,15 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
         # own async_setup is still running - by the time HA has fully
         # started, every component loading this boot already has.
         if not await _async_register_lovelace_resource(hass, card_url):
-            add_extra_js_url(hass, card_url)
+            try:
+                add_extra_js_url(hass, card_url)
+            except Exception:  # noqa: BLE001 - last-resort fallback; if even
+                # this fails, log it rather than silently leaving the card
+                # completely unregistered with no clue why.
+                _LOGGER.exception(
+                    "Could not register the AR Smart Scheduler card via "
+                    "add_extra_js_url either - the card will not load"
+                )
 
     if hass.is_running:
         await _async_register_resource()
