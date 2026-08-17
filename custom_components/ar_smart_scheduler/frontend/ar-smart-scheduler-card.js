@@ -6,6 +6,10 @@
  *   type: custom:ar-smart-scheduler-card
  *   title: Schedules            (optional)
  *   entry_id: <entry id>        (optional - show a single scheduler only)
+ *   style: aurora-glass         (optional - visual theme, see THEME_CLASSES
+ *                                 below. Omit for the original plain look.
+ *                                 One of: aurora-glass | material-tonal |
+ *                                 slate-executive | nova-vibrant)
  *
  * Fully configurable from the card itself: add a new schedule, pick which
  * entities it controls, choose time/sunrise/sunset triggers with offsets,
@@ -20,7 +24,7 @@
 // cache, etc.) is visible to the eye instead of silently causing "the fix
 // didn't work" reports - what's actually running is what's shown here,
 // regardless of what version was installed on the backend.
-const CARD_VERSION = "1.6.5";
+const CARD_VERSION = "1.7.0";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
@@ -29,6 +33,41 @@ const TRIGGER_ICONS = {
   time: "M12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22C6.47,22 2,17.5 2,12A10,10 0 0,1 12,2M12.5,7V12.25L17,14.92L16.25,16.15L11,13V7H12.5Z",
   sunrise: "M3,12H7A5,5 0 0,1 12,7A5,5 0 0,1 17,12H21A1,1 0 0,1 22,13A1,1 0 0,1 21,14H3A1,1 0 0,1 2,13A1,1 0 0,1 3,12M15,12A3,3 0 0,0 12,9A3,3 0 0,0 9,12H15M12,2L14.39,5.42C13.65,5.15 12.84,5 12,5C11.16,5 10.35,5.15 9.61,5.42L12,2M3.34,7L7.5,6.65C6.9,7.16 6.36,7.78 5.94,8.5C5.5,9.24 5.25,10 5.11,10.79L3.34,7M20.65,7L18.88,10.79C18.74,10 18.47,9.23 18.05,8.5C17.63,7.78 17.1,7.15 16.5,6.64L20.65,7M12,18L14,16H10L12,18Z",
   sunset: "M3,12H7A5,5 0 0,1 12,7A5,5 0 0,1 17,12H21A1,1 0 0,1 22,13A1,1 0 0,1 21,14H3A1,1 0 0,1 2,13A1,1 0 0,1 3,12M15,12A3,3 0 0,0 12,9A3,3 0 0,0 9,12H15M12,2L14.39,5.42C13.65,5.15 12.84,5 12,5C11.16,5 10.35,5.15 9.61,5.42L12,2M3.34,7L7.5,6.65C6.9,7.16 6.36,7.78 5.94,8.5C5.5,9.24 5.25,10 5.11,10.79L3.34,7M20.65,7L18.88,10.79C18.74,10 18.47,9.23 18.05,8.5C17.63,7.78 17.1,7.15 16.5,6.64L20.65,7M12,16L10,18H14L12,16Z",
+};
+
+// Per-device-type icon + accent color, used only by the optional visual
+// themes (see THEME_CLASSES) to draw a colored icon badge on each schedule's
+// header and tint its toggle/day-pills/chips. Keyed by the same resolved
+// device_type values as ACTION_SPECS (never "auto"). Falls back to the
+// "onoff" entry for any device_type not listed here.
+const DEVICE_ICONS = {
+  cover: "M2,21H4V11L12,4L20,11V21H22V22H2V21M6,19H18V12.11L12,6.83L6,12.11V19M8,14H16V16H8V14M8,17H13V19H8V17Z",
+  light: "M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z",
+  climate: "M15,13V5A3,3 0 0,0 12,2A3,3 0 0,0 9,5V13A5,5 0 1,0 15,13M12,4A1,1 0 0,1 13,5H12V6.5H13V8H12V9.5H13V11H12V13.5A1.5,1.5 0 1,1 11,13.5V5A1,1 0 0,1 12,4Z",
+  water_heater: "M17.66,11.2C17.43,10.9 17.15,10.64 16.89,10.38C16.22,9.78 15.46,9.35 14.82,8.72C13.33,7.26 13,4.85 13.95,3C13,3.23 12.17,3.75 11.46,4.32C8.87,6.4 7.85,10.07 9.07,13.22C9.11,13.32 9.15,13.42 9.15,13.55C9.15,13.77 9,13.97 8.8,14.05C8.57,14.15 8.33,14.09 8.14,13.93C8.08,13.88 8.04,13.83 8,13.76C6.87,12.33 6.69,10.28 7.45,8.64C5.78,10 4.87,12.3 5,14.47C5.06,14.97 5.12,15.47 5.29,15.97C5.43,16.57 5.7,17.17 6,17.7C7.08,19.43 8.95,20.67 10.96,20.92C13.1,21.19 15.39,20.8 17.03,19.32C18.86,17.66 19.5,15 18.56,12.72L18.43,12.46C18.22,12 17.66,11.2 17.66,11.2M14.5,17.5C14.22,17.74 13.76,18 13.4,18.1C12.28,18.5 11.16,17.94 10.5,17.28C11.69,17 12.4,16.12 12.61,15.23C12.78,14.43 12.46,13.77 12.33,13C12.21,12.26 12.23,11.63 12.5,10.94C12.69,11.32 12.89,11.7 13.13,12C13.9,13 15.11,13.44 15.37,14.8C15.41,14.94 15.43,15.08 15.43,15.23C15.46,16.05 15.1,16.95 14.5,17.5H14.5Z",
+  lock: "M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z",
+  onoff: "M17,7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7M17,15A3,3 0 0,1 14,12A3,3 0 0,1 17,9A3,3 0 0,1 20,12A3,3 0 0,1 17,15Z",
+};
+const DOMAIN_COLORS = {
+  cover: "#3b82f6",
+  light: "#f5a623",
+  climate: "#f97066",
+  water_heater: "#fb923c",
+  lock: "#b794f4",
+  onoff: "#2dd4bf",
+};
+
+// Optional per-card visual themes, set via the "style" Lovelace config key
+// (see the header comment). Each maps to a CSS class added to <ha-card>;
+// the actual rules live in _render()'s <style> block under the matching
+// "ha-card.theme-*" selectors. No "style" configured (or an unrecognized
+// value) keeps the original plain look untouched, so existing dashboards
+// never change unless someone opts in.
+const THEME_CLASSES = {
+  "aurora-glass": "theme-glass",
+  "material-tonal": "theme-material",
+  "slate-executive": "theme-slate",
+  "nova-vibrant": "theme-vibrant",
 };
 
 // Mirrors const.py - used only as a fallback until the backend's
@@ -718,9 +757,16 @@ class ARSmartSchedulerCard extends HTMLElement {
     const summaryStart = s.start_trigger === "time" ? this._fmtTime(s.start_time) : s.start_trigger;
     const summaryEnd = s.end_trigger === "time" ? this._fmtTime(s.end_time) : s.end_trigger;
 
+    // Only used by the optional themes (THEME_CLASSES) - harmless to compute
+    // unconditionally since the badge itself is display:none unless a theme
+    // class is present on <ha-card>.
+    const domainIcon = DEVICE_ICONS[s.device_type] || DEVICE_ICONS.onoff;
+    const domainColor = DOMAIN_COLORS[s.device_type] || DOMAIN_COLORS.onoff;
+
     return `
-      <div class="sched ${s.enabled ? "" : "disabled"}">
+      <div class="sched ${s.enabled ? "" : "disabled"}" style="--dom:${domainColor}">
         <div class="row head" data-act="expand" data-entry="${s.entry_id}">
+          <div class="icon-badge">${this._icon(domainIcon, "badge-ic")}</div>
           <div class="titleblock">
             <input class="name-input" data-act="rename" data-entry="${s.entry_id}" data-stop="1" value="${this._esc(s.name)}" title="Tap to rename">
             <div class="sub">${summaryStart} → ${summaryEnd}${s.second_enabled ? " · 2nd window" : ""} · ${(s.targets || []).length} entit${(s.targets || []).length === 1 ? "y" : "ies"}</div>
@@ -797,6 +843,7 @@ class ARSmartSchedulerCard extends HTMLElement {
 
   _render(error) {
     const title = this._config.title || "AR Smart Scheduler";
+    const themeClass = THEME_CLASSES[this._config.style] || "";
     let body;
     if (error) {
       body = `<div class="empty">Could not load schedulers: ${this._esc(error)}</div>`;
@@ -895,8 +942,84 @@ class ARSmartSchedulerCard extends HTMLElement {
         .addform-actions button { border-radius: 999px; padding: 8px 16px; font-size: 0.9em; cursor:pointer; border: 1px solid var(--divider-color); background: transparent; color: var(--primary-text-color); }
         .addform-actions button.primary { background: var(--primary-color); color: var(--text-primary-color, #fff); border: none; font-weight: 500; }
         .addform-actions button:disabled { opacity: 0.6; cursor: default; }
+
+        /* ==================================================================
+           Optional visual themes - activated via the "style" config key
+           (see THEME_CLASSES). Hidden/no-op unless one of the
+           "ha-card.theme-*" classes below is present, so the default look
+           above is completely unaffected for anyone who hasn't opted in.
+           Each theme only re-skins existing elements (colors, radii,
+           shadows, the icon-badge) - no structure or behavior changes.
+           Colors read the per-schedule "--dom" custom property (set inline
+           on .sched by _renderScheduler) so each card tints itself by its
+           device type. color-mix() drives the tonal blends; every rule that
+           uses it also declares a flat fallback color first so a webview
+           without color-mix support (older Android/iOS HA Companion App
+           builds) still gets a sensible color instead of a blank one. ================================================================== */
+        .icon-badge { display:none; width:40px; height:40px; border-radius:12px; align-items:center; justify-content:center; flex:none; }
+        .badge-ic { width:22px; height:22px; }
+
+        /* ---- Aurora Glass: dark glassmorphism, glowing per-domain accents ---- */
+        ha-card.theme-glass { background: radial-gradient(500px 260px at 10% 0%, rgba(125,211,252,.14), transparent 60%), radial-gradient(420px 220px at 100% 10%, rgba(232,121,249,.10), transparent 55%), var(--card-background-color); }
+        ha-card.theme-glass .toolbar button { background: #7dd3fc; background: linear-gradient(135deg,#7dd3fc,#a78bfa); color:#0a0d14; box-shadow: 0 6px 18px rgba(125,211,252,.35); }
+        ha-card.theme-glass .sched { background: rgba(127,127,127,.07); border:1px solid rgba(127,127,127,.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 10px 26px rgba(0,0,0,.25); border-radius:16px; }
+        ha-card.theme-glass .sched:not(.disabled) { box-shadow: 0 10px 26px rgba(0,0,0,.3), 0 0 0 1px color-mix(in srgb, var(--dom) 30%, transparent), 0 0 20px -8px color-mix(in srgb, var(--dom) 55%, transparent); }
+        ha-card.theme-glass .icon-badge { display:flex; background: var(--dom); background: linear-gradient(135deg, color-mix(in srgb, var(--dom) 85%, white), color-mix(in srgb, var(--dom) 55%, black)); box-shadow: 0 4px 14px -2px color-mix(in srgb, var(--dom) 65%, transparent); }
+        ha-card.theme-glass .badge-ic { fill:#fff; }
+        ha-card.theme-glass .day { background: rgba(127,127,127,.1); border-color: rgba(127,127,127,.2); }
+        ha-card.theme-glass .day.on { background: var(--dom); background: color-mix(in srgb, var(--dom) 70%, transparent); border-color: transparent; color:#fff; }
+        ha-card.theme-glass .win-cell, ha-card.theme-glass .act-cell { background: rgba(127,127,127,.06); border-color: rgba(127,127,127,.16); border-radius:12px; }
+        ha-card.theme-glass .trig { color: var(--dom); color: color-mix(in srgb, var(--dom) 80%, white); }
+        ha-card.theme-glass .switch input:checked + .slider { background: var(--dom); background: linear-gradient(135deg, var(--dom), color-mix(in srgb, var(--dom) 55%, #a78bfa)); box-shadow: 0 0 12px -2px color-mix(in srgb, var(--dom) 65%, transparent); }
+        ha-card.theme-glass .chip { background: rgba(127,127,127,.14); }
+        ha-card.theme-glass .addform { background: rgba(127,127,127,.07); border-color: rgba(127,127,127,.18); border-radius:16px; }
+
+        /* ---- Material Tonal: light, rounded, Material-You-style tonal surfaces ---- */
+        ha-card.theme-material .sched { background:#fff; border:none; border-radius:22px; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08); }
+        ha-card.theme-material .name-input, ha-card.theme-material .secondlabel, ha-card.theme-material .confirm-text { color:#1d1b20; }
+        ha-card.theme-material .sub, ha-card.theme-material .win-head, ha-card.theme-material .win-label, ha-card.theme-material .manage-label, ha-card.theme-material .next, ha-card.theme-material .hint { color:#79747e; }
+        ha-card.theme-material .chev svg { fill:#79747e; }
+        ha-card.theme-material .icon-badge { display:flex; background:#f5a623; background: color-mix(in srgb, var(--dom) 16%, white); border-radius:14px; }
+        ha-card.theme-material .badge-ic { fill:#79747e; fill: color-mix(in srgb, var(--dom) 75%, black); }
+        ha-card.theme-material .toolbar button { background:#6750a4; color:#fff; border-radius:20px; box-shadow: 0 3px 8px rgba(103,80,164,.35); }
+        ha-card.theme-material .day { background:#f2edf7; border:none; color:#79747e; }
+        ha-card.theme-material .day.on { background:#1d1b20; background: color-mix(in srgb, var(--dom) 85%, black); color:#fff; }
+        ha-card.theme-material .win-cell, ha-card.theme-material .act-cell { border:none; border-radius:16px; background:#faf8fc; background: color-mix(in srgb, var(--dom) 8%, white); }
+        ha-card.theme-material .trig { color:#6750a4; color: color-mix(in srgb, var(--dom) 70%, black); }
+        ha-card.theme-material .switch input:checked + .slider { background: var(--dom); }
+        ha-card.theme-material .chip { background:#f2edf7; color:#49454f; }
+        ha-card.theme-material .manage { border-top-color:#ece6f0; }
+        ha-card.theme-material .addform { background:#fff; border:none; border-radius:22px; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08); }
+
+        /* ---- Slate Executive: minimal, compact, colored rail instead of blocks ---- */
+        ha-card.theme-slate .sched { background: rgba(127,127,127,.03); border:1px solid var(--divider-color); border-left:3px solid var(--dom); border-radius:10px; box-shadow:none; }
+        ha-card.theme-slate .sched.disabled { border-left-color: var(--divider-color); }
+        ha-card.theme-slate .icon-badge { display:flex; border-radius:10px; border:1px solid var(--divider-color); background:transparent; }
+        ha-card.theme-slate .badge-ic { fill: var(--secondary-text-color); }
+        ha-card.theme-slate .toolbar button { background:transparent; color: var(--primary-text-color); border:1px solid var(--divider-color); border-radius:8px; box-shadow:none; }
+        ha-card.theme-slate .day { background:transparent; }
+        ha-card.theme-slate .day.on { background: var(--primary-text-color); color: var(--card-background-color); border-color: var(--primary-text-color); }
+        ha-card.theme-slate .win-cell, ha-card.theme-slate .act-cell { border-radius:8px; box-shadow:none; }
+        ha-card.theme-slate .trig { color: var(--primary-text-color); }
+        ha-card.theme-slate .switch input:checked + .slider { background: var(--primary-text-color); }
+        ha-card.theme-slate .switch input:checked + .slider:before { background: var(--card-background-color); }
+        ha-card.theme-slate .chip { background:transparent; border:1px solid var(--divider-color); }
+        ha-card.theme-slate .addform { border-radius:10px; box-shadow:none; }
+
+        /* ---- Nova Vibrant: bold gradient banners, glowing circular badges ---- */
+        ha-card.theme-vibrant .sched { background: rgba(127,127,127,.05); border:1px solid rgba(127,127,127,.16); border-radius:14px; box-shadow:0 8px 20px rgba(0,0,0,.18); overflow:hidden; }
+        ha-card.theme-vibrant .row.head { background: linear-gradient(120deg, color-mix(in srgb, var(--dom) 30%, transparent), transparent 75%); }
+        ha-card.theme-vibrant .icon-badge { display:flex; border-radius:50%; background: var(--dom); background: linear-gradient(135deg, var(--dom), color-mix(in srgb, var(--dom) 40%, #845ef7)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dom) 18%, transparent); }
+        ha-card.theme-vibrant .badge-ic { fill:#fff; }
+        ha-card.theme-vibrant .toolbar button { background:#ff6b9d; background: linear-gradient(135deg,#ff6b9d,#845ef7); color:#fff; box-shadow: 0 6px 20px -4px rgba(255,107,157,.5); }
+        ha-card.theme-vibrant .day.on { background: var(--dom); background: linear-gradient(135deg, var(--dom), #845ef7); color:#fff; border-color:transparent; }
+        ha-card.theme-vibrant .win-cell, ha-card.theme-vibrant .act-cell { border-radius:14px; }
+        ha-card.theme-vibrant .trig { color: var(--dom); }
+        ha-card.theme-vibrant .switch input:checked + .slider { background: var(--dom); background: linear-gradient(135deg, var(--dom), #845ef7); }
+        ha-card.theme-vibrant .chip { background: rgba(127,127,127,.16); }
+        ha-card.theme-vibrant .addform { border-radius:14px; box-shadow:0 8px 20px rgba(0,0,0,.18); }
       </style>
-      <ha-card>
+      <ha-card class="${themeClass}">
         <div class="card-title-row">
           <div class="card-title">${title}</div>
           <div class="card-version">v${CARD_VERSION}</div>
