@@ -59,6 +59,7 @@ Perfect for lights, pumps, gates, garage doors, irrigation, and more.
 - 🖥️ Lovelace friendly  
 - 🛠️ Installer focused  
 - ⚡ Real-time updates  
+- 🎨 4 built-in card themes, or the original plain look (see [Card Themes](#-card-themes))
 
 ---
 
@@ -142,6 +143,49 @@ opening Settings → Devices & Services:
   position, climate mode/temperature, water heater mode/temperature, lock
   state), matched to whatever the "Applies to" device profile is.
 - 🗑️ **Remove** a schedule entirely, with a tap-to-confirm.
+
+---
+
+## 🎨 Card Themes
+
+The card ships with four optional visual themes on top of the original
+plain look. Pick one with the `style` key — everything else about the card
+(behavior, config, entities) stays exactly the same, only the skin changes:
+
+```yaml
+type: custom:ar-smart-scheduler-card
+title: Schedules
+style: aurora-glass   # aurora-glass | material-tonal | slate-executive | nova-vibrant
+```
+
+Leave `style` out and the card renders the original default look shown
+first below — nothing changes for existing dashboards unless you opt in.
+
+| Default (no `style` set) | `aurora-glass` |
+|---|---|
+| ![Default card](docs/images/theme-classic.png) | ![Aurora Glass theme](docs/images/theme-aurora-glass.png) |
+
+| `material-tonal` | `slate-executive` |
+|---|---|
+| ![Material Tonal theme](docs/images/theme-material-tonal.png) | ![Slate Executive theme](docs/images/theme-slate-executive.png) |
+
+| `nova-vibrant` | |
+|---|---|
+| ![Nova Vibrant theme](docs/images/theme-nova-vibrant.png) | |
+
+- **`aurora-glass`** — dark glassmorphism: frosted, blurred card surfaces
+  with a glowing colored accent per device type.
+- **`material-tonal`** — light, rounded Material-You-style cards with a
+  soft tonal background per device type.
+- **`slate-executive`** — minimal, compact, and dark, with a thin colored
+  rail instead of blocks of color — an editorial/dashboard feel.
+- **`nova-vibrant`** — bold gradient banners and glowing circular icon
+  badges for a punchier, colorful look.
+
+Each theme colors itself per schedule by device type (lights amber, covers
+blue, climate red, water heaters orange, locks purple, on/off switches
+teal), so the icon badge, toggle, active weekday pills, and accents all
+match automatically — no per-card configuration needed beyond `style`.
 
 ---
 
