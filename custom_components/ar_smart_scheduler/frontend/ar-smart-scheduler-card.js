@@ -24,7 +24,7 @@
 // cache, etc.) is visible to the eye instead of silently causing "the fix
 // didn't work" reports - what's actually running is what's shown here,
 // regardless of what version was installed on the backend.
-const CARD_VERSION = "1.7.0";
+const CARD_VERSION = "1.8.0";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "T", fri: "F", sat: "S", sun: "S" };
@@ -98,6 +98,16 @@ const ACTION_SPECS = {
     options: ["on", "off", "brightness"],
     value: { field: "brightness", min: 0, max: 100, step: 5, unit: "%", showWhen: "brightness" },
     keys: { start: "light_start_action", startVal: "light_start_brightness", end: "light_end_action", endVal: "light_end_brightness" },
+    // Color is a separate, combinable knob on top of the on/off/brightness
+    // action (a schedule can dim AND set a color at the same time, just
+    // like calling light.turn_on with both brightness_pct and rgb_color).
+    // devicePrefix + extraFields let _buildActionPatch() generically carry
+    // these fields through untouched whenever some *other* light field
+    // (the action dropdown, the brightness stepper) is edited - otherwise
+    // that patch would only include action+brightness and the backend would
+    // reset color back to "none" every time brightness was nudged.
+    devicePrefix: "light",
+    extraFields: ["color_mode", "rgb_color", "color_temp_kelvin", "effect"],
   },
   climate: {
     options: ["heat", "cool", "off", "temperature"],
@@ -121,11 +131,35 @@ const ACTION_SPECS = {
   },
 };
 
+// Optional color control layered on top of a light's on/off/brightness
+// action - mirrors const.py's LIGHT_COLOR_MODES. "none" keeps the plain
+// on/off-with-brightness behavior; the other three each show one matching
+// control (see _lightColorHtml).
+const LIGHT_COLOR_MODES = ["none", "color", "color_temp", "effect"];
+const LIGHT_COLOR_MODE_LABELS = {
+  none: "Plain on/off",
+  color: "RGB color",
+  color_temp: "White (color temp)",
+  effect: "Effect",
+};
+const LIGHT_COLOR_TEMP_MIN_KELVIN = 2000;
+const LIGHT_COLOR_TEMP_MAX_KELVIN = 6500;
+
 // 'change'-based fields (commit on blur/selection), matching the existing
 // time-input convention, so typing a name never gets wiped mid-keystroke by
 // a re-render. The entity picker (.entinput/.entrow) is wired separately in
 // _wireEntityPickers() since it needs live 'input' filtering, not 'change'.
-const CHANGE_ACTS = new Set(["set-time", "rename", "add-name", "action-select", "add-devtype", "devtype"]);
+const CHANGE_ACTS = new Set([
+  "set-time",
+  "rename",
+  "add-name",
+  "action-select",
+  "add-devtype",
+  "devtype",
+  "light-color-mode",
+  "light-color-rgb",
+  "light-effect",
+]);
 
 // If the backend never replies to a websocket call - a bug in the handler
 // that swallows an exception without responding, a stuck/dropped connection,
@@ -181,6 +215,35 @@ class ARSmartSchedulerCard extends HTMLElement {
     this._addBusy = false;
     this._addError = "";
     this._resetAddForm();
+
+    // Visible error banner for background calls (toggle/rename/add-entity/
+    // action edits) that fail after the picker has already closed - without
+    // this, a rejected websocket call (duplicate name+entities, an entity
+    // domain the backend doesn't support, a dropped connection, ...) was
+    // only ever logged to the browser console (see the old catch blocks in
+    // _set/_setGeneral/_setActions/_deleteScheduler), so from the user's
+    // seat the UI just silently did nothing - indistinguishable from the
+    // dropdown itself being broken.
+    this._toast = "";
+    this._toastTimer = null;
+
+    // The entity-picker dropdown is rendered as a "portal" appended directly
+    // to document.body (see _ensurePortal), not inside this card's own
+    // shadow DOM. A plain `position: fixed` element only anchors to the
+    // true viewport when NONE of its ancestors set a transform / filter /
+    // perspective / contain / container-type - but modern Lovelace
+    // "Sections" dashboards wrap every card in an element that sets
+    // `container-type` (for card container queries) and/or CSS containment,
+    // which silently turns that ancestor into the fixed element's
+    // containing block instead. The dropdown then renders far from the
+    // input - sometimes fully off-screen - which looks exactly like "no
+    // dropdown appears at all". Appending it to document.body sidesteps any
+    // such ancestor entirely, regardless of which dashboard layout hosts
+    // this card.
+    this._portalHost = null;
+    this._portalDropdown = null;
+    this._portalFormId = null;
+    this._portalInput = null;
   }
 
   _resetAddForm() {
@@ -210,17 +273,21 @@ class ARSmartSchedulerCard extends HTMLElement {
     if (this._hass && !this._loaded) this._refresh();
     this._pollTimer = setInterval(() => this._refresh(true), 30000);
 
-    // Closes an open entity-picker dropdown when the user taps/clicks
-    // anywhere outside it (including outside the card entirely) - the
-    // dropdown itself doesn't otherwise know to collapse, since opening it
-    // is a plain DOM toggle done without a full _render() (see
-    // _wireEntityPickers) so typing isn't interrupted mid-keystroke.
+    // Closes the entity-picker dropdown when the user taps/clicks anywhere
+    // outside it (including outside the card entirely) - the dropdown
+    // itself doesn't otherwise know to collapse, since opening it is a
+    // plain DOM toggle done without a full _render() (see
+    // _wireEntityPickers) so typing isn't interrupted mid-keystroke. The
+    // dropdown lives in a body-level portal (see _ensurePortal), not inside
+    // this card's shadow root, but composedPath() still reports it (and the
+    // shadow-root-internal input) correctly since it pierces shadow
+    // boundaries for composed events like click.
     this._outsideClickHandler = (ev) => {
+      if (!this._portalDropdown || !this._portalDropdown.classList.contains("open")) return;
       const path = ev.composedPath ? ev.composedPath() : [];
-      this.shadowRoot.querySelectorAll(".entdropdown.open").forEach((dropdown) => {
-        const picker = dropdown.closest(".entpicker");
-        if (!picker || !path.includes(picker)) dropdown.classList.remove("open");
-      });
+      const insidePortal = this._portalHost && path.includes(this._portalHost);
+      const insideInput = this._portalInput && path.includes(this._portalInput);
+      if (!insidePortal && !insideInput) this._closePortal();
     };
     document.addEventListener("click", this._outsideClickHandler, true);
 
@@ -247,6 +314,22 @@ class ARSmartSchedulerCard extends HTMLElement {
       window.removeEventListener("resize", this._repositionHandler);
       this._repositionHandler = null;
     }
+    if (this._toastTimer) {
+      clearTimeout(this._toastTimer);
+      this._toastTimer = null;
+    }
+    // The portal lives outside this element's own DOM subtree (appended to
+    // document.body - see _ensurePortal), so it isn't cleaned up
+    // automatically when the card itself is removed (e.g. a dashboard
+    // reload while editing the layout). Remove it explicitly to avoid
+    // leaking a detached-from-the-card host element into the page.
+    if (this._portalHost && this._portalHost.parentNode) {
+      this._portalHost.parentNode.removeChild(this._portalHost);
+    }
+    this._portalHost = null;
+    this._portalDropdown = null;
+    this._portalFormId = null;
+    this._portalInput = null;
   }
 
   _isEditingText() {
@@ -311,6 +394,22 @@ class ARSmartSchedulerCard extends HTMLElement {
     }
   }
 
+  // Puts a failed background call in front of the user instead of only the
+  // browser console. Before this, a rejected websocket call here (a
+  // duplicate name+entities combo, an unsupported entity domain, a dropped
+  // connection, ...) was silent from the user's seat: the picker/toggle/
+  // stepper they just used simply appeared to do nothing, which is
+  // impossible to tell apart from the control itself being broken.
+  _notifyError(err) {
+    const msg = (err && err.message) || String(err);
+    this._toast = msg;
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      this._toast = "";
+      this._render();
+    }, 8000);
+  }
+
   async _set(entryId, patch) {
     if (!this._hass) return;
     try {
@@ -319,6 +418,7 @@ class ARSmartSchedulerCard extends HTMLElement {
       );
     } catch (err) {
       console.error("ar-smart-scheduler-card set_options failed", err);
+      this._notifyError(err);
     }
     await this._refresh();
   }
@@ -331,6 +431,7 @@ class ARSmartSchedulerCard extends HTMLElement {
       );
     } catch (err) {
       console.error("ar-smart-scheduler-card set_general failed", err);
+      this._notifyError(err);
     }
     await this._refresh();
   }
@@ -343,6 +444,7 @@ class ARSmartSchedulerCard extends HTMLElement {
       );
     } catch (err) {
       console.error("ar-smart-scheduler-card set_actions failed", err);
+      this._notifyError(err);
     }
     await this._refresh();
   }
@@ -353,6 +455,7 @@ class ARSmartSchedulerCard extends HTMLElement {
       await this._callWS({ type: "ar_smart_scheduler/delete", entry_id: entryId });
     } catch (err) {
       console.error("ar-smart-scheduler-card delete failed", err);
+      this._notifyError(err);
     }
     this._expanded.delete(entryId);
     await this._refresh();
@@ -515,11 +618,17 @@ class ARSmartSchedulerCard extends HTMLElement {
   }
 
   _entityPickerHtml(formId, exclude) {
+    // No inline .entdropdown here anymore - it's a single reusable portal
+    // appended to document.body (see _ensurePortal/_openPortal) so it can
+    // never be mispositioned or clipped by a dashboard's own card wrapper.
+    // `exclude` isn't needed at render time either: the portal's content is
+    // (re)built from live state the moment it's opened/typed into (see
+    // _openPortal/_updatePortalContent via _excludeFor), so a stale
+    // pre-rendered exclude list can never linger after a re-render.
     return `
       <div class="entpicker">
         <input type="text" class="entinput" placeholder="+ add entity… (tap to browse)" data-form="${this._esc(formId)}"
                autocomplete="off" autocapitalize="off" spellcheck="false">
-        <div class="entdropdown" data-form="${this._esc(formId)}">${this._entityRows(formId, exclude, "")}</div>
       </div>`;
   }
 
@@ -535,15 +644,24 @@ class ARSmartSchedulerCard extends HTMLElement {
     }
   }
 
-  // The dropdown is rendered as a position:fixed overlay (see .entdropdown
-  // in _render()'s <style>) instead of sitting in normal document flow.
-  // Earlier this was in-flow, which had two mobile-specific failure modes:
-  // an ancestor with overflow/height constraints (e.g. a dashboard grid
-  // section) could clip it entirely, and the on-screen keyboard could cover
-  // it below the fold - both looking exactly like "no dropdown appears".
-  // An overlay positioned from the input's real viewport coordinates avoids
-  // both: it can't be clipped by a card/grid ancestor, and it's placed
-  // above the input instead of below when there isn't room underneath.
+  // The dropdown is a position:fixed overlay, appended to document.body via
+  // _ensurePortal() rather than sitting in normal document flow inside this
+  // card. Earlier revisions kept it in-flow inside the card's own shadow
+  // DOM, which had failure modes that all looked identical from the user's
+  // seat - "no dropdown appears": an ancestor with overflow/height
+  // constraints (e.g. a dashboard grid section) could clip it entirely, the
+  // on-screen keyboard could cover it below the fold, and - the one that
+  // slipped through even after switching to `position: fixed` - a modern
+  // Lovelace "Sections" dashboard wraps every card in an element that sets
+  // `container-type`/CSS containment, which becomes the fixed element's
+  // containing block instead of the viewport, throwing this exact math off
+  // by however far that wrapper is offset. Rendering into a body-level
+  // portal removes the card's own DOM (and whatever wraps it) from the
+  // equation entirely: nothing between the portal and <body> can intercept
+  // fixed positioning that this card doesn't itself control. This function
+  // still just computes screen coordinates from the input's real position
+  // and opens the dropdown above the input instead of below when there
+  // isn't room underneath.
   _positionDropdown(input, dropdown) {
     if (typeof input.getBoundingClientRect !== "function") return;
     const r = input.getBoundingClientRect();
@@ -568,18 +686,89 @@ class ARSmartSchedulerCard extends HTMLElement {
     }
   }
 
-  // Re-run positioning for every currently-open dropdown - used on
+  // Re-run positioning for the currently-open dropdown - used on
   // scroll/resize (registered in connectedCallback) and after a short delay
   // following focus, since mobile browsers auto-scroll a focused input into
   // view (to clear the on-screen keyboard) slightly *after* focus fires,
   // which would otherwise leave a just-opened dropdown anchored to the
   // input's pre-scroll position.
   _repositionOpenDropdowns() {
-    this.shadowRoot.querySelectorAll(".entdropdown.open").forEach((dropdown) => {
-      const picker = dropdown.closest(".entpicker");
-      const input = picker && picker.querySelector(".entinput");
-      if (input) this._positionDropdown(input, dropdown);
+    if (this._portalDropdown && this._portalDropdown.classList.contains("open") && this._portalInput) {
+      this._positionDropdown(this._portalInput, this._portalDropdown);
+    }
+  }
+
+  // Lazily creates the single reusable dropdown "portal": a host element
+  // appended directly to document.body (never inside this card's own DOM,
+  // wherever a dashboard happens to have placed it), with its own shadow
+  // root so the dropdown's styling stays self-contained instead of leaking
+  // rules into the rest of the page. See the constructor's _portalHost
+  // comment for *why* it needs to live outside the card at all - in short,
+  // `position: fixed` only anchors to the real viewport when nothing
+  // between it and <body> establishes its own containing block, and a
+  // dashboard's card wrapper can't do that to an element it never contains.
+  _ensurePortal() {
+    if (this._portalDropdown) return this._portalDropdown;
+
+    const host = document.createElement("div");
+    host.setAttribute("data-ar-smart-scheduler-portal", "");
+    document.body.appendChild(host);
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `
+      <style>
+        :host { all: initial; }
+        .entdropdown { display:none; position: fixed; box-sizing: border-box; border: 1px solid var(--divider-color); border-radius: 10px; overflow-y: auto; background: var(--secondary-background-color); color: var(--primary-text-color); box-shadow: 0 4px 18px rgba(0,0,0,0.35); -webkit-overflow-scrolling: touch; z-index: 2147483000; font-family: var(--paper-font-body1_-_font-family, Roboto, "Noto Sans", sans-serif); font-size: 16px; }
+        .entdropdown.open { display:block; }
+        .entgroup:not(:last-child) { border-bottom: 1px solid var(--divider-color); }
+        .entgroup-header { position: sticky; top: 0; z-index: 1; display:flex; align-items:center; justify-content:space-between; gap:6px; padding: 6px 12px; background: var(--card-background-color); color: var(--secondary-text-color); font-size: 0.72em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+        .entgroup-count { color: var(--secondary-text-color); font-size: 0.95em; font-weight: 400; text-transform: none; letter-spacing: normal; opacity: 0.7; }
+        .entrow { display:flex; align-items:center; width:100%; box-sizing:border-box; padding: 11px 12px; background:transparent; border:none; border-bottom:1px solid var(--divider-color); text-align:left; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color: rgba(0,0,0,0.15); }
+        .entgroup .entrow:last-child { border-bottom:none; }
+        .entrow:hover, .entrow:active { background: var(--card-background-color); }
+        .entname { color: var(--primary-text-color); font-size: 0.95em; }
+        .entempty, .entmore { padding: 10px 12px; color: var(--secondary-text-color); font-size: 0.85em; }
+      </style>
+      <div class="entdropdown"></div>`;
+
+    // Delegated click handler - rows are re-rendered wholesale on every
+    // open/type (see _openPortal/_updatePortalContent), so one listener on
+    // the container is simpler and cheaper than rewiring each row.
+    root.addEventListener("click", (ev) => {
+      const row = ev.target && ev.target.closest ? ev.target.closest(".entrow") : null;
+      if (!row) return;
+      ev.stopPropagation();
+      this._pickEntity(row.dataset.form, row.dataset.ent);
+      this._closePortal();
     });
+
+    this._portalHost = host;
+    this._portalDropdown = root.querySelector(".entdropdown");
+    return this._portalDropdown;
+  }
+
+  _openPortal(formId, input) {
+    const dropdown = this._ensurePortal();
+    this._portalFormId = formId;
+    this._portalInput = input;
+    dropdown.innerHTML = this._entityRows(formId, this._excludeFor(formId), "");
+    dropdown.classList.add("open");
+    this._positionDropdown(input, dropdown);
+    if (typeof window.setTimeout === "function") {
+      window.setTimeout(() => this._repositionOpenDropdowns(), 350);
+    }
+  }
+
+  _updatePortalContent(formId, search) {
+    if (!this._portalDropdown || this._portalFormId !== formId) return;
+    this._portalDropdown.innerHTML = this._entityRows(formId, this._excludeFor(formId), search);
+    this._portalDropdown.classList.add("open");
+    if (this._portalInput) this._positionDropdown(this._portalInput, this._portalDropdown);
+  }
+
+  _closePortal() {
+    if (this._portalDropdown) this._portalDropdown.classList.remove("open");
+    this._portalFormId = null;
+    this._portalInput = null;
   }
 
   _excludeFor(formId) {
@@ -588,38 +777,19 @@ class ARSmartSchedulerCard extends HTMLElement {
     return (s && s.targets) || [];
   }
 
-  _wireEntityRows(container) {
-    container.querySelectorAll(".entrow").forEach((row) => {
-      row.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        this._pickEntity(row.dataset.form, row.dataset.ent);
-      });
-    });
-  }
-
   _wireEntityPickers() {
     this.shadowRoot.querySelectorAll(".entpicker").forEach((picker) => {
       const input = picker.querySelector(".entinput");
-      const dropdown = picker.querySelector(".entdropdown");
-      if (!input || !dropdown) return;
+      if (!input) return;
       const formId = input.dataset.form;
-
-      this._wireEntityRows(dropdown);
 
       input.addEventListener("focus", (ev) => {
         ev.stopPropagation();
-        dropdown.classList.add("open");
-        this._positionDropdown(input, dropdown);
-        if (typeof window.setTimeout === "function") {
-          window.setTimeout(() => this._repositionOpenDropdowns(), 350);
-        }
+        this._openPortal(formId, input);
       });
       input.addEventListener("click", (ev) => ev.stopPropagation());
       input.addEventListener("input", () => {
-        dropdown.innerHTML = this._entityRows(formId, this._excludeFor(formId), input.value);
-        dropdown.classList.add("open");
-        this._positionDropdown(input, dropdown);
-        this._wireEntityRows(dropdown);
+        this._updatePortalContent(formId, input.value);
       });
     });
   }
@@ -689,6 +859,10 @@ class ARSmartSchedulerCard extends HTMLElement {
       const showValue = v && actionVal === v.showWhen;
       const valKey = v ? `${sideKey}_${v.field}` : null;
       const cur = valKey ? a[valKey] : null;
+      // Color/effect controls are a light-only extra, layered on top of
+      // whatever the on/off/brightness action above is doing - they only
+      // make sense while the light is actually being turned on.
+      const colorHtml = s.device_type === "light" && actionVal !== "off" ? this._lightColorHtml(s, sideKey, a) : "";
       return `
         <div class="act-cell">
           <div class="win-head">${label}</div>
@@ -704,6 +878,7 @@ class ARSmartSchedulerCard extends HTMLElement {
                  </div>`
               : ""
           }
+          ${colorHtml}
         </div>`;
     };
 
@@ -715,6 +890,83 @@ class ARSmartSchedulerCard extends HTMLElement {
           ${side("End", "end")}
         </div>
       </div>`;
+  }
+
+  _rgbToHex(rgb) {
+    const clamp = (n) => Math.max(0, Math.min(255, parseInt(n, 10) || 0));
+    return "#" + (rgb || [255, 255, 255]).map((c) => clamp(c).toString(16).padStart(2, "0")).join("");
+  }
+
+  _hexToRgb(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+    if (!m) return [255, 255, 255];
+    return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+  }
+
+  // Effects are entity-specific (a strip light's "Rainbow"/"Twinkle" list
+  // has nothing to do with a downlight's), so instead of a fixed list the
+  // dropdown is built from whatever the actual target entities currently
+  // report via their `effect_list` attribute. Multiple targets get the
+  // union of everything any of them supports.
+  _effectListFor(targets) {
+    if (!this._hass) return [];
+    const set = new Set();
+    (targets || []).forEach((id) => {
+      const st = this._hass.states[id];
+      const list = st && st.attributes && st.attributes.effect_list;
+      if (Array.isArray(list)) {
+        list.forEach((e) => {
+          if (typeof e === "string") set.add(e);
+        });
+      }
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }
+
+  // Color mode is a separate knob from the on/off/brightness action above
+  // (see ACTION_SPECS.light's devicePrefix/extraFields comment) - "none"
+  // keeps the light's current color untouched, the other three each render
+  // one matching control. `a` is the schedule's raw actions object
+  // (generic "start_x"/"end_x" keys, same as the rest of _actionsSection),
+  // not the device-prefixed wire format used when patching the backend.
+  _lightColorHtml(s, sideKey, a) {
+    const mode = a[`${sideKey}_color_mode`] || "none";
+    const rgbRaw = a[`${sideKey}_rgb_color`];
+    const rgb = Array.isArray(rgbRaw) && rgbRaw.length === 3 ? rgbRaw : [255, 255, 255];
+    const kelvin = a[`${sideKey}_color_temp_kelvin`] || LIGHT_COLOR_TEMP_MIN_KELVIN;
+    const effect = a[`${sideKey}_effect`] || "";
+    const hex = this._rgbToHex(rgb);
+    const effectList = this._effectListFor(s.targets);
+
+    const modeSelect = `
+      <select data-act="light-color-mode" data-entry="${s.entry_id}" data-side="${sideKey}">
+        ${LIGHT_COLOR_MODES.map((m) => `<option value="${m}" ${m === mode ? "selected" : ""}>${LIGHT_COLOR_MODE_LABELS[m]}</option>`).join("")}
+      </select>`;
+
+    let extra = "";
+    if (mode === "color") {
+      extra = `
+        <div class="color-row">
+          <input type="color" value="${hex}" data-act="light-color-rgb" data-entry="${s.entry_id}" data-side="${sideKey}">
+          <span class="color-hex">${hex}</span>
+        </div>`;
+    } else if (mode === "color_temp") {
+      extra = `
+        <div class="offset">
+          <button data-act="light-color-temp" data-entry="${s.entry_id}" data-side="${sideKey}" data-delta="-100" data-cur="${kelvin}">−</button>
+          <span>${kelvin}K</span>
+          <button data-act="light-color-temp" data-entry="${s.entry_id}" data-side="${sideKey}" data-delta="100" data-cur="${kelvin}">+</button>
+        </div>`;
+    } else if (mode === "effect") {
+      extra = effectList.length
+        ? `<select data-act="light-effect" data-entry="${s.entry_id}" data-side="${sideKey}">
+             <option value="">Choose effect…</option>
+             ${effectList.map((e) => `<option value="${this._esc(e)}" ${e === effect ? "selected" : ""}>${this._esc(e)}</option>`).join("")}
+           </select>`
+        : `<div class="hint">No effects reported yet - turn the light on once, then reopen this card.</div>`;
+    }
+
+    return `<div class="color-block">${modeSelect}${extra}</div>`;
   }
 
   _manageSection(s) {
@@ -842,6 +1094,11 @@ class ARSmartSchedulerCard extends HTMLElement {
   }
 
   _render(error) {
+    // Any input the portal dropdown was anchored to is about to be replaced
+    // (shadowRoot.innerHTML = ... below), so close it first rather than
+    // leaving it open and pointed at a detached element.
+    this._closePortal();
+
     const title = this._config.title || "AR Smart Scheduler";
     const themeClass = THEME_CLASSES[this._config.style] || "";
     let body;
@@ -865,6 +1122,8 @@ class ARSmartSchedulerCard extends HTMLElement {
         .toolbar { display:flex; justify-content:flex-end; margin: -6px 0 10px; }
         .toolbar button { display:flex; align-items:center; gap:6px; background: var(--primary-color); color: var(--text-primary-color, #fff); border:none; border-radius: 999px; padding: 7px 14px; font-size:0.88em; font-weight:500; cursor:pointer; }
         .empty { color: var(--secondary-text-color); padding: 12px 4px; text-align:center; }
+        .toast { display:flex; align-items:center; justify-content:space-between; gap:10px; background: color-mix(in srgb, var(--error-color, #d32f2f) 12%, var(--card-background-color)); color: var(--primary-text-color); border: 1px solid var(--error-color, #d32f2f); border-radius: 10px; padding: 8px 10px; margin: -2px 0 10px; font-size: 0.88em; }
+        .toast button { background:transparent; border:none; color: var(--error-color, #d32f2f); font-size: 1.2em; line-height:1; cursor:pointer; padding: 0 2px; flex: none; }
         .sched { border: 1px solid var(--divider-color); border-radius: 12px; margin-bottom: 10px; overflow: hidden; background: var(--card-background-color); }
         .sched.disabled .titleblock, .sched.disabled .body { opacity: 0.55; }
         .row.head { display:flex; align-items:center; gap: 10px; padding: 10px 12px; cursor:pointer; }
@@ -893,22 +1152,15 @@ class ARSmartSchedulerCard extends HTMLElement {
         select { padding: 7px 6px; }
         .entpicker { position: relative; }
         .entinput { padding: 10px 8px; }
-        /* Positioned via JS (_positionDropdown) as a fixed overlay anchored
-           to the input's on-screen coordinates, not left in normal document
-           flow - a card/grid ancestor's overflow or height can't clip an
-           overlay the way it could clip something in-flow, and it can open
-           upward instead of being hidden behind the on-screen keyboard. */
-        .entdropdown { display:none; position: fixed; box-sizing: border-box; border: 1px solid var(--divider-color); border-radius: 10px; overflow-y: auto; background: var(--secondary-background-color); box-shadow: 0 4px 18px rgba(0,0,0,0.35); -webkit-overflow-scrolling: touch; z-index: 9999; }
-        .entdropdown.open { display:block; }
-        .entgroup:not(:last-child) { border-bottom: 1px solid var(--divider-color); }
-        .entgroup-header { position: sticky; top: 0; z-index: 1; display:flex; align-items:center; justify-content:space-between; gap:6px; padding: 6px 12px; background: var(--card-background-color); color: var(--secondary-text-color); font-size: 0.72em; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-        .entgroup-count { color: var(--secondary-text-color); font-size: 0.95em; font-weight: 400; text-transform: none; letter-spacing: normal; opacity: 0.7; }
-        .entrow { display:flex; align-items:center; width:100%; box-sizing:border-box; padding: 11px 12px; background:transparent; border:none; border-bottom:1px solid var(--divider-color); text-align:left; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color: rgba(0,0,0,0.15); }
-        .entgroup .entrow:last-child { border-bottom:none; }
-        .entrow:hover, .entrow:active { background: var(--card-background-color); }
-        .entname { color: var(--primary-text-color); font-size: 0.95em; }
-        .entempty, .entmore { padding: 10px 12px; color: var(--secondary-text-color); font-size: 0.85em; }
+        /* The dropdown itself is a body-level portal, not part of this
+           stylesheet - see _ensurePortal(). Its rows/groups/etc. get their
+           own self-contained <style> there so they render identically no
+           matter what dashboard layout hosts this card. */
         .offset { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top: 6px; }
+        .color-block { display:flex; flex-direction:column; gap:6px; margin-top: 8px; }
+        .color-row { display:flex; align-items:center; gap:8px; }
+        input[type="color"] { width: 44px; height: 32px; padding: 2px; flex: none; border: 1px solid var(--divider-color); border-radius: 8px; background: var(--secondary-background-color); cursor:pointer; }
+        .color-hex { font-family: monospace; font-size: 0.85em; color: var(--secondary-text-color); text-transform: uppercase; }
         .offset button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); cursor:pointer; font-size: 1.1em; flex: none; }
         .offset span { font-variant-numeric: tabular-nums; }
         .next { font-size: 0.78em; color: var(--secondary-text-color); margin-top: 6px; }
@@ -1024,6 +1276,14 @@ class ARSmartSchedulerCard extends HTMLElement {
           <div class="card-title">${title}</div>
           <div class="card-version">v${CARD_VERSION}</div>
         </div>
+        ${
+          this._toast
+            ? `<div class="toast">
+                 <span>${this._esc(this._toast)}</span>
+                 <button type="button" data-act="toast-dismiss" title="Dismiss">×</button>
+               </div>`
+            : ""
+        }
         <div class="toolbar">
           ${
             this._addOpen
@@ -1067,7 +1327,34 @@ class ARSmartSchedulerCard extends HTMLElement {
       patch[spec.keys.startVal] = overrides[startKey] !== undefined ? overrides[startKey] : a[startKey];
       patch[spec.keys.endVal] = overrides[endKey] !== undefined ? overrides[endKey] : a[endKey];
     }
+    // Carries fields that aren't part of the coarse action/value pair above
+    // straight through untouched (e.g. a light's color_mode/rgb_color/
+    // color_temp_kelvin/effect) - without this, patching just the action or
+    // the brightness stepper would send the backend only those two fields,
+    // and it would reset everything else this spec owns back to its
+    // default (wiping a chosen color back to "none") on every unrelated
+    // edit.
+    if (spec.extraFields && spec.devicePrefix) {
+      spec.extraFields.forEach((field) => {
+        ["start", "end"].forEach((side) => {
+          const genericKey = `${side}_${field}`;
+          const wireKey = `${spec.devicePrefix}_${side}_${field}`;
+          patch[wireKey] = overrides[genericKey] !== undefined ? overrides[genericKey] : a[genericKey];
+        });
+      });
+    }
     return patch;
+  }
+
+  // Updates one light color field (color_mode / rgb_color /
+  // color_temp_kelvin / effect) for one side (start/end) of a schedule,
+  // preserving every other action field via _buildActionPatch's
+  // extraFields handling above.
+  _setLightColorField(s, sideKey, field, value) {
+    const spec = ACTION_SPECS.light;
+    const overrides = { [`${sideKey}_${field}`]: value };
+    const patch = this._buildActionPatch(s, spec, overrides);
+    this._setActions(s.entry_id, patch);
   }
 
   _onChange(ev, el) {
@@ -1109,6 +1396,27 @@ class ARSmartSchedulerCard extends HTMLElement {
       return;
     }
 
+    if (act === "light-color-mode") {
+      const s = this._findScheduler(el.dataset.entry);
+      if (!s) return;
+      this._setLightColorField(s, el.dataset.side, "color_mode", el.value);
+      return;
+    }
+
+    if (act === "light-color-rgb") {
+      const s = this._findScheduler(el.dataset.entry);
+      if (!s) return;
+      this._setLightColorField(s, el.dataset.side, "rgb_color", this._hexToRgb(el.value));
+      return;
+    }
+
+    if (act === "light-effect") {
+      const s = this._findScheduler(el.dataset.entry);
+      if (!s) return;
+      this._setLightColorField(s, el.dataset.side, "effect", el.value);
+      return;
+    }
+
     if (act === "devtype") {
       this._setGeneral(el.dataset.entry, { device_type: el.value });
       return;
@@ -1119,6 +1427,16 @@ class ARSmartSchedulerCard extends HTMLElement {
     ev.stopPropagation();
     const act = el.dataset.act;
     const entryId = el.dataset.entry;
+
+    if (act === "toast-dismiss") {
+      this._toast = "";
+      if (this._toastTimer) {
+        clearTimeout(this._toastTimer);
+        this._toastTimer = null;
+      }
+      this._render();
+      return;
+    }
 
     if (act === "add-open") {
       this._addOpen = true;
@@ -1187,6 +1505,16 @@ class ARSmartSchedulerCard extends HTMLElement {
       const next = Math.max(v.min, Math.min(v.max, cur + delta));
       const patch = this._buildActionPatch(s, spec, { [`${el.dataset.side}_${v.field}`]: next });
       this._setActions(entryId, patch);
+      return;
+    }
+
+    if (act === "light-color-temp") {
+      const s = this._findScheduler(entryId);
+      if (!s) return;
+      const cur = parseInt(el.dataset.cur, 10) || LIGHT_COLOR_TEMP_MIN_KELVIN;
+      const delta = parseInt(el.dataset.delta, 10) || 0;
+      const next = Math.max(LIGHT_COLOR_TEMP_MIN_KELVIN, Math.min(LIGHT_COLOR_TEMP_MAX_KELVIN, cur + delta));
+      this._setLightColorField(s, el.dataset.side, "color_temp_kelvin", next);
       return;
     }
 

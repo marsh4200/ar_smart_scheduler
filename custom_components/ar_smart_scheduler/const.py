@@ -159,6 +159,30 @@ DEFAULT_LIGHT_END_ACTION = "off"
 DEFAULT_LIGHT_START_BRIGHTNESS = 50
 DEFAULT_LIGHT_END_BRIGHTNESS = 10
 
+# Optional color control layered on top of the on/off/brightness action -
+# lets a schedule also set an RGB color, a white color temperature, or an
+# effect whenever the light is being turned on (action "on" or
+# "brightness"). "none" keeps the old plain on/off-with-brightness behavior
+# so existing schedules are unaffected until someone opts in.
+LIGHT_COLOR_MODES = ["none", "color", "color_temp", "effect"]
+
+CONF_LIGHT_START_COLOR_MODE = "light_start_color_mode"
+CONF_LIGHT_END_COLOR_MODE = "light_end_color_mode"
+CONF_LIGHT_START_RGB = "light_start_rgb_color"
+CONF_LIGHT_END_RGB = "light_end_rgb_color"
+CONF_LIGHT_START_COLOR_TEMP = "light_start_color_temp_kelvin"
+CONF_LIGHT_END_COLOR_TEMP = "light_end_color_temp_kelvin"
+CONF_LIGHT_START_EFFECT = "light_start_effect"
+CONF_LIGHT_END_EFFECT = "light_end_effect"
+
+DEFAULT_LIGHT_COLOR_MODE = "none"
+DEFAULT_LIGHT_RGB = [255, 255, 255]
+DEFAULT_LIGHT_COLOR_TEMP_KELVIN = 3000
+DEFAULT_LIGHT_EFFECT = ""
+
+LIGHT_COLOR_TEMP_MIN_KELVIN = 2000
+LIGHT_COLOR_TEMP_MAX_KELVIN = 6500
+
 # -------------------------------------------------
 # CLIMATE SUPPORT
 # -------------------------------------------------

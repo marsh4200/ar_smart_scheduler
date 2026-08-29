@@ -142,6 +142,11 @@ opening Settings → Devices & Services:
 - 🎛️ **Actions** — what happens at start/end (on/off, brightness, cover
   position, climate mode/temperature, water heater mode/temperature, lock
   state), matched to whatever the "Applies to" device profile is.
+- 🌈 **Light color** — layered on top of a light's on/off/brightness action:
+  an RGB color (pick with a color swatch), a white color temperature (in
+  Kelvin), or one of the light's own effects (pulled live from the entity,
+  e.g. "Rainbow" or "Twinkle") - independently for the start and end of the
+  window, and combinable with brightness.
 - 🗑️ **Remove** a schedule entirely, with a tap-to-confirm.
 
 ---

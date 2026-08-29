@@ -14,8 +14,16 @@ from .const import (
     CONF_END_SERVICE,
     CONF_LIGHT_END_ACTION,
     CONF_LIGHT_END_BRIGHTNESS,
+    CONF_LIGHT_END_COLOR_MODE,
+    CONF_LIGHT_END_COLOR_TEMP,
+    CONF_LIGHT_END_EFFECT,
+    CONF_LIGHT_END_RGB,
     CONF_LIGHT_START_ACTION,
     CONF_LIGHT_START_BRIGHTNESS,
+    CONF_LIGHT_START_COLOR_MODE,
+    CONF_LIGHT_START_COLOR_TEMP,
+    CONF_LIGHT_START_EFFECT,
+    CONF_LIGHT_START_RGB,
     CONF_LOCK_END_ACTION,
     CONF_LOCK_START_ACTION,
     CONF_ONOFF_END_ACTION,
@@ -37,7 +45,11 @@ from .const import (
     DEFAULT_COVER_START_ACTION,
     DEFAULT_COVER_START_POSITION,
     DEFAULT_DEVICE_TYPE,
+    DEFAULT_LIGHT_COLOR_MODE,
+    DEFAULT_LIGHT_COLOR_TEMP_KELVIN,
+    DEFAULT_LIGHT_EFFECT,
     DEFAULT_LIGHT_END_BRIGHTNESS,
+    DEFAULT_LIGHT_RGB,
     DEFAULT_LIGHT_START_BRIGHTNESS,
     DEFAULT_WATER_HEATER_END_ACTION,
     DEFAULT_WATER_HEATER_END_TEMPERATURE,
@@ -47,6 +59,36 @@ from .const import (
     ONOFF_ACTION_TO_SERVICE,
     SUPPORTED_ENTITY_DOMAINS,
 )
+
+
+def _safe_rgb(value) -> list[int]:
+    try:
+        r, g, b = value
+        return [max(0, min(255, int(r))), max(0, min(255, int(g))), max(0, min(255, int(b)))]
+    except Exception:
+        return list(DEFAULT_LIGHT_RGB)
+
+
+def _safe_kelvin(value) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return DEFAULT_LIGHT_COLOR_TEMP_KELVIN
+
+
+def _light_service_data(action: str, brightness: int, color_mode: str, rgb, color_temp: int, effect: str) -> dict:
+    if action not in ("on", "brightness"):
+        return {}
+    data: dict = {}
+    if action == "brightness":
+        data["brightness_pct"] = brightness
+    if color_mode == "color":
+        data["rgb_color"] = list(rgb)
+    elif color_mode == "color_temp":
+        data["color_temp_kelvin"] = color_temp
+    elif color_mode == "effect" and effect:
+        data["effect"] = effect
+    return data
 
 
 def normalize_entity_ids(entity_ids) -> list[str]:
@@ -92,11 +134,19 @@ def build_runtime_action_updates(options: dict, data: dict) -> dict:
         end_action = options.get(CONF_LIGHT_END_ACTION, "off")
         start_brightness = int(options.get(CONF_LIGHT_START_BRIGHTNESS, DEFAULT_LIGHT_START_BRIGHTNESS))
         end_brightness = int(options.get(CONF_LIGHT_END_BRIGHTNESS, DEFAULT_LIGHT_END_BRIGHTNESS))
+        start_color_mode = options.get(CONF_LIGHT_START_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE)
+        end_color_mode = options.get(CONF_LIGHT_END_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE)
+        start_rgb = _safe_rgb(options.get(CONF_LIGHT_START_RGB, DEFAULT_LIGHT_RGB))
+        end_rgb = _safe_rgb(options.get(CONF_LIGHT_END_RGB, DEFAULT_LIGHT_RGB))
+        start_temp = _safe_kelvin(options.get(CONF_LIGHT_START_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN))
+        end_temp = _safe_kelvin(options.get(CONF_LIGHT_END_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN))
+        start_effect = str(options.get(CONF_LIGHT_START_EFFECT, DEFAULT_LIGHT_EFFECT) or "")
+        end_effect = str(options.get(CONF_LIGHT_END_EFFECT, DEFAULT_LIGHT_EFFECT) or "")
         return {
             CONF_START_SERVICE: "turn_on" if start_action in ("on", "brightness") else "turn_off",
             CONF_END_SERVICE: "turn_on" if end_action in ("on", "brightness") else "turn_off",
-            CONF_START_DATA: {"brightness_pct": start_brightness} if start_action == "brightness" else {},
-            CONF_END_DATA: {"brightness_pct": end_brightness} if end_action == "brightness" else {},
+            CONF_START_DATA: _light_service_data(start_action, start_brightness, start_color_mode, start_rgb, start_temp, start_effect),
+            CONF_END_DATA: _light_service_data(end_action, end_brightness, end_color_mode, end_rgb, end_temp, end_effect),
         }
     if device_type == "climate":
         start_action = options.get(CONF_CLIMATE_START_ACTION, DEFAULT_CLIMATE_START_ACTION)
@@ -169,8 +219,16 @@ def action_snapshot(options: dict, data: dict) -> dict:
             "device_type": device_type,
             "start_action": options.get(CONF_LIGHT_START_ACTION, "brightness"),
             "start_brightness": int(options.get(CONF_LIGHT_START_BRIGHTNESS, DEFAULT_LIGHT_START_BRIGHTNESS)),
+            "start_color_mode": options.get(CONF_LIGHT_START_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE),
+            "start_rgb_color": _safe_rgb(options.get(CONF_LIGHT_START_RGB, DEFAULT_LIGHT_RGB)),
+            "start_color_temp_kelvin": _safe_kelvin(options.get(CONF_LIGHT_START_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN)),
+            "start_effect": str(options.get(CONF_LIGHT_START_EFFECT, DEFAULT_LIGHT_EFFECT) or ""),
             "end_action": options.get(CONF_LIGHT_END_ACTION, "off"),
             "end_brightness": int(options.get(CONF_LIGHT_END_BRIGHTNESS, DEFAULT_LIGHT_END_BRIGHTNESS)),
+            "end_color_mode": options.get(CONF_LIGHT_END_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE),
+            "end_rgb_color": _safe_rgb(options.get(CONF_LIGHT_END_RGB, DEFAULT_LIGHT_RGB)),
+            "end_color_temp_kelvin": _safe_kelvin(options.get(CONF_LIGHT_END_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN)),
+            "end_effect": str(options.get(CONF_LIGHT_END_EFFECT, DEFAULT_LIGHT_EFFECT) or ""),
         }
     if device_type == "climate":
         return {

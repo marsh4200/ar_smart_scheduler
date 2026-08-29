@@ -24,8 +24,16 @@ from .const import (
     CONF_END_TRIGGER,
     CONF_LIGHT_END_ACTION,
     CONF_LIGHT_END_BRIGHTNESS,
+    CONF_LIGHT_END_COLOR_MODE,
+    CONF_LIGHT_END_COLOR_TEMP,
+    CONF_LIGHT_END_EFFECT,
+    CONF_LIGHT_END_RGB,
     CONF_LIGHT_START_ACTION,
     CONF_LIGHT_START_BRIGHTNESS,
+    CONF_LIGHT_START_COLOR_MODE,
+    CONF_LIGHT_START_COLOR_TEMP,
+    CONF_LIGHT_START_EFFECT,
+    CONF_LIGHT_START_RGB,
     CONF_LOCK_END_ACTION,
     CONF_LOCK_START_ACTION,
     CONF_NAME,
@@ -62,8 +70,12 @@ from .const import (
     DEFAULT_END,
     DEFAULT_END_OFFSET,
     DEFAULT_END_TRIGGER,
+    DEFAULT_LIGHT_COLOR_MODE,
+    DEFAULT_LIGHT_COLOR_TEMP_KELVIN,
+    DEFAULT_LIGHT_EFFECT,
     DEFAULT_LIGHT_END_ACTION,
     DEFAULT_LIGHT_END_BRIGHTNESS,
+    DEFAULT_LIGHT_RGB,
     DEFAULT_LIGHT_START_ACTION,
     DEFAULT_LIGHT_START_BRIGHTNESS,
     DEFAULT_LOCK_END_ACTION,
@@ -87,6 +99,9 @@ from .const import (
     DEFAULT_WEEKDAYS,
     DEVICE_TYPES,
     DOMAIN,
+    LIGHT_COLOR_MODES,
+    LIGHT_COLOR_TEMP_MAX_KELVIN,
+    LIGHT_COLOR_TEMP_MIN_KELVIN,
     LOCK_ACTIONS,
     LOCK_ACTION_TO_SERVICE,
     ONOFF_ACTIONS,
@@ -222,6 +237,62 @@ def _light_defaults_from_existing(existing: dict):
     return start_action, start_bri, end_action, end_bri
 
 
+def _normalize_rgb(value) -> list[int]:
+    try:
+        r, g, b = value
+        return [max(0, min(255, int(r))), max(0, min(255, int(g))), max(0, min(255, int(b)))]
+    except Exception:
+        return list(DEFAULT_LIGHT_RGB)
+
+
+def _clamp_kelvin(value) -> int:
+    try:
+        kelvin = int(value)
+    except Exception:
+        kelvin = DEFAULT_LIGHT_COLOR_TEMP_KELVIN
+    return max(LIGHT_COLOR_TEMP_MIN_KELVIN, min(LIGHT_COLOR_TEMP_MAX_KELVIN, kelvin))
+
+
+def _light_color_defaults_from_existing(existing: dict):
+    start_mode = existing.get(CONF_LIGHT_START_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE)
+    if start_mode not in LIGHT_COLOR_MODES:
+        start_mode = DEFAULT_LIGHT_COLOR_MODE
+    end_mode = existing.get(CONF_LIGHT_END_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE)
+    if end_mode not in LIGHT_COLOR_MODES:
+        end_mode = DEFAULT_LIGHT_COLOR_MODE
+
+    start_rgb = _normalize_rgb(existing.get(CONF_LIGHT_START_RGB, DEFAULT_LIGHT_RGB))
+    end_rgb = _normalize_rgb(existing.get(CONF_LIGHT_END_RGB, DEFAULT_LIGHT_RGB))
+    start_temp = _clamp_kelvin(existing.get(CONF_LIGHT_START_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN))
+    end_temp = _clamp_kelvin(existing.get(CONF_LIGHT_END_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN))
+    start_effect = str(existing.get(CONF_LIGHT_START_EFFECT, DEFAULT_LIGHT_EFFECT) or "")
+    end_effect = str(existing.get(CONF_LIGHT_END_EFFECT, DEFAULT_LIGHT_EFFECT) or "")
+
+    return start_mode, start_rgb, start_temp, start_effect, end_mode, end_rgb, end_temp, end_effect
+
+
+def _light_service_data(action: str, brightness: int, color_mode: str, rgb: list[int], color_temp: int, effect: str) -> dict:
+    """Build the light.turn_on/turn_off service data for one side (start/end).
+
+    Brightness and color are independent knobs - a schedule can dim AND set
+    a color/effect in the same call, matching how light.turn_on itself
+    accepts brightness_pct alongside rgb_color/color_temp_kelvin/effect.
+    Neither applies when the action is "off".
+    """
+    if action not in ("on", "brightness"):
+        return {}
+    data: dict = {}
+    if action == "brightness":
+        data["brightness_pct"] = brightness
+    if color_mode == "color":
+        data["rgb_color"] = list(rgb)
+    elif color_mode == "color_temp":
+        data["color_temp_kelvin"] = color_temp
+    elif color_mode == "effect" and effect:
+        data["effect"] = effect
+    return data
+
+
 def _climate_defaults_from_existing(existing: dict):
     start_action = existing.get(CONF_CLIMATE_START_ACTION)
     end_action = existing.get(CONF_CLIMATE_END_ACTION)
@@ -307,6 +378,16 @@ def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.
 
     if device_type == "light":
         start_action, start_bri, end_action, end_bri = _light_defaults_from_existing(existing)
+        (
+            start_color_mode,
+            start_rgb,
+            start_temp,
+            start_effect,
+            end_color_mode,
+            end_rgb,
+            end_temp,
+            end_effect,
+        ) = _light_color_defaults_from_existing(existing)
         return vol.Schema(
             {
                 vol.Required(CONF_LIGHT_START_ACTION, default=start_action): selector.SelectSelector(
@@ -315,12 +396,40 @@ def _build_action_schema(device_type: str, existing: dict | None = None) -> vol.
                 vol.Required(CONF_LIGHT_START_BRIGHTNESS, default=start_bri): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER)
                 ),
+                vol.Optional(CONF_LIGHT_START_COLOR_MODE, default=start_color_mode): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=LIGHT_COLOR_MODES)
+                ),
+                vol.Optional(CONF_LIGHT_START_RGB, default=start_rgb): selector.ColorRGBSelector(),
+                vol.Optional(CONF_LIGHT_START_COLOR_TEMP, default=start_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=LIGHT_COLOR_TEMP_MIN_KELVIN,
+                        max=LIGHT_COLOR_TEMP_MAX_KELVIN,
+                        step=100,
+                        unit_of_measurement="K",
+                        mode=selector.NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(CONF_LIGHT_START_EFFECT, default=start_effect): selector.TextSelector(),
                 vol.Required(CONF_LIGHT_END_ACTION, default=end_action): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=["on", "off", "brightness"])
                 ),
                 vol.Required(CONF_LIGHT_END_BRIGHTNESS, default=end_bri): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, max=100, step=5, mode=selector.NumberSelectorMode.SLIDER)
                 ),
+                vol.Optional(CONF_LIGHT_END_COLOR_MODE, default=end_color_mode): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=LIGHT_COLOR_MODES)
+                ),
+                vol.Optional(CONF_LIGHT_END_RGB, default=end_rgb): selector.ColorRGBSelector(),
+                vol.Optional(CONF_LIGHT_END_COLOR_TEMP, default=end_temp): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=LIGHT_COLOR_TEMP_MIN_KELVIN,
+                        max=LIGHT_COLOR_TEMP_MAX_KELVIN,
+                        step=100,
+                        unit_of_measurement="K",
+                        mode=selector.NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(CONF_LIGHT_END_EFFECT, default=end_effect): selector.TextSelector(),
             }
         )
 
@@ -419,14 +528,36 @@ def _resolve_action_options(device_type: str, user_input: dict) -> dict:
         start_bri = int(user_input.get(CONF_LIGHT_START_BRIGHTNESS, DEFAULT_LIGHT_START_BRIGHTNESS))
         end_bri = int(user_input.get(CONF_LIGHT_END_BRIGHTNESS, DEFAULT_LIGHT_END_BRIGHTNESS))
 
+        start_color_mode = user_input.get(CONF_LIGHT_START_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE)
+        if start_color_mode not in LIGHT_COLOR_MODES:
+            start_color_mode = DEFAULT_LIGHT_COLOR_MODE
+        end_color_mode = user_input.get(CONF_LIGHT_END_COLOR_MODE, DEFAULT_LIGHT_COLOR_MODE)
+        if end_color_mode not in LIGHT_COLOR_MODES:
+            end_color_mode = DEFAULT_LIGHT_COLOR_MODE
+
+        start_rgb = _normalize_rgb(user_input.get(CONF_LIGHT_START_RGB, DEFAULT_LIGHT_RGB))
+        end_rgb = _normalize_rgb(user_input.get(CONF_LIGHT_END_RGB, DEFAULT_LIGHT_RGB))
+        start_temp = _clamp_kelvin(user_input.get(CONF_LIGHT_START_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN))
+        end_temp = _clamp_kelvin(user_input.get(CONF_LIGHT_END_COLOR_TEMP, DEFAULT_LIGHT_COLOR_TEMP_KELVIN))
+        start_effect = str(user_input.get(CONF_LIGHT_START_EFFECT, DEFAULT_LIGHT_EFFECT) or "").strip()
+        end_effect = str(user_input.get(CONF_LIGHT_END_EFFECT, DEFAULT_LIGHT_EFFECT) or "").strip()
+
         out[CONF_LIGHT_START_ACTION] = start_action
         out[CONF_LIGHT_END_ACTION] = end_action
         out[CONF_LIGHT_START_BRIGHTNESS] = start_bri
         out[CONF_LIGHT_END_BRIGHTNESS] = end_bri
+        out[CONF_LIGHT_START_COLOR_MODE] = start_color_mode
+        out[CONF_LIGHT_END_COLOR_MODE] = end_color_mode
+        out[CONF_LIGHT_START_RGB] = start_rgb
+        out[CONF_LIGHT_END_RGB] = end_rgb
+        out[CONF_LIGHT_START_COLOR_TEMP] = start_temp
+        out[CONF_LIGHT_END_COLOR_TEMP] = end_temp
+        out[CONF_LIGHT_START_EFFECT] = start_effect
+        out[CONF_LIGHT_END_EFFECT] = end_effect
         out[CONF_START_SERVICE] = "turn_on" if start_action in ("on", "brightness") else "turn_off"
         out[CONF_END_SERVICE] = "turn_on" if end_action in ("on", "brightness") else "turn_off"
-        out[CONF_START_DATA] = {"brightness_pct": start_bri} if start_action == "brightness" else {}
-        out[CONF_END_DATA] = {"brightness_pct": end_bri} if end_action == "brightness" else {}
+        out[CONF_START_DATA] = _light_service_data(start_action, start_bri, start_color_mode, start_rgb, start_temp, start_effect)
+        out[CONF_END_DATA] = _light_service_data(end_action, end_bri, end_color_mode, end_rgb, end_temp, end_effect)
         return out
 
     if device_type == "climate":
